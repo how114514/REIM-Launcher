@@ -1,11 +1,11 @@
-# HTCL 技术架构设计
+# REIM 技术架构设计
 
-> 文档版本：**4.0（HTCL Native Launcher 定稿版）**  
+> 文档版本：**4.0（REIM Native Launcher 定稿版）**  
 > 日期：2026-11-18  
-> 项目名称：**HTCL — How To Craft Launcher**  
+> 项目名称：**REIM Launcher** — Minecraft Reimagined. A New Native Minecraft Experience  
 > 主版本基线：**Minecraft Java Edition 26.3**（协议 777 / DataVersion 5023 / 资源包 97.1 / 数据包 121.0 / Java 25）  
 > 游戏运行时引擎基线：**Unreal Engine 5.8.4**（开发/编译/Cook/Package 基线；用户侧不安装 UE）  
-> 文档性质：产品定位、进程边界、Native 运行时与渲染路线基线。**HTCL 是 Minecraft Native Launcher，不是 Java Edition Launcher；不提供启动原版 Java Minecraft 的能力。**
+> 文档性质：产品定位、进程边界、Native 运行时与渲染路线基线。**REIM 是 Minecraft Native Launcher，不是 Java Edition Launcher；不提供启动原版 Java Minecraft 的能力。**
 
 ---
 
@@ -13,46 +13,46 @@
 
 ### 0.1 产品是什么
 
-HTCL 是一个 **Minecraft Native Launcher**，同时包含一条 **Minecraft 专用 Native 化 / 转换工具链** 和一个 **C++ + Unreal 的 Native 游戏运行环境**：
+REIM 是一个 **Minecraft Native Launcher**，同时包含一条 **Minecraft 专用 Native 化 / 转换工具链** 和一个 **C++ + Unreal 的 Native 游戏运行环境**：
 
 1. **管理 Minecraft Java Edition 输入**：检测、读取、校验用户自有的 Java Edition 文件（version JSON、client.jar、libraries、assets），把它们作为**转换输入和研究规格**，但**从不启动它们**。
 2. **Minecraft Native 化（Nativization）**：把 Java Edition 的实现、数据和版本差异，**尽可能自动化地**转成可独立运行的 C++ Minecraft Runtime。它不是“通用 Java→C++ 编译器”，而是“分析/分类 + 选择性翻译 + 代码生成 + Native Adapter + Runtime Support + Patch + 差分验证”的工具链组合；具体子系统用哪种方法，由 P0 实验决定（§5）。
-3. **启动 Native Runtime**：Launcher 只启动 **HTCL Native Runtime**（UE Shipping 发布包 + `mc_<version>.dll`）。C++ Minecraft Runtime 保留游戏语义和世界状态；它通过 **Rendering Contract → Rendering Bridge** 把渲染数据交给 **Unreal Renderer**。UE 不接管游戏规则、物理、AI、世界模拟和网络权威。
+3. **启动 Native Runtime**：Launcher 只启动 **REIM Native Runtime**（UE Shipping 发布包 + `mc_<version>.dll`）。C++ Minecraft Runtime 保留游戏语义和世界状态；它通过 **Rendering Contract → Rendering Bridge** 把渲染数据交给 **Unreal Renderer**。UE 不接管游戏规则、物理、AI、世界模拟和网络权威。
 
-最终用户体验是：**打开 HTCL → 选择用户自有的 Java Edition 版本 → 准备/转换 → 安装/获取 Native Runtime → 启动 Native 游戏**。HTCL 不会启动 `javaw.exe`、不会构造 Java classpath、不会启动 Java Edition 实例。**用户不需要安装 Unreal Engine、Unreal Editor、JDK、MSVC、CMake 或 C++ 开发环境。**
+最终用户体验是：**打开 REIM → 选择用户自有的 Java Edition 版本 → 准备/转换 → 安装/获取 Native Runtime → 启动 Native 游戏**。REIM 不会启动 `javaw.exe`、不会构造 Java classpath、不会启动 Java Edition 实例。**用户不需要安装 Unreal Engine、Unreal Editor、JDK、MSVC、CMake 或 C++ 开发环境。**
 
 ### 0.2 三个交付物
 
 | 交付物 | 形态 | 是否依赖 JVM | 是否依赖 UE | 职责 |
 |---|---|---|---|---|
-| **HTCL Launcher** | 桌面应用 `HTCL.Launcher.exe` | **否**（JDK 只属于 Converter/开发模式） | 否 | UI、账号、Minecraft 版本信息、本地 Java Edition 文件检测/准备、Native 化任务、Native 版本/实例/Runtime 管理、启动 Native Runtime、进程监管、日志/崩溃/更新 |
-| **HTCL Converter / Native Toolchain** | 命令行工具链 `htcl-convert.exe` + JVM 分析/导出助手 | Native 化时需要（JDK 25） | 否 | 版本分析、差异分析、数据/资源导出、选择性翻译/代码生成、Native Adapter、Patch、编译、差分验证 |
-| **HTCL Runtime（用户发布包）** | UE **Shipping** 打包产物 `HTCLRuntime.exe` + `mc_<version>.dll` + pak/IoStore | **运行时不需要** | **内含，用户无需安装** | UE 运行时、窗口/输入/音频、Rendering Bridge、Unreal Renderer；加载 C++ 游戏逻辑 |
-| **HTCL Runtime（开发构建）** | `Development`/Editor 构建 | 运行时不需要 | **开发机需要 UE 5.8.4** | 调试、Cook/Package、渲染/性能验证；不面向普通用户 |
+| **REIM Launcher** | 桌面应用 `REIM.Launcher.exe` | **否**（JDK 只属于 Converter/开发模式） | 否 | UI、账号、Minecraft 版本信息、本地 Java Edition 文件检测/准备、Native 化任务、Native 版本/实例/Runtime 管理、启动 Native Runtime、进程监管、日志/崩溃/更新 |
+| **REIM Converter / Native Toolchain** | 命令行工具链 `reim-convert.exe` + JVM 分析/导出助手 | Native 化时需要（JDK 25） | 否 | 版本分析、差异分析、数据/资源导出、选择性翻译/代码生成、Native Adapter、Patch、编译、差分验证 |
+| **REIM Runtime（用户发布包）** | UE **Shipping** 打包产物 `REIMRuntime.exe` + `mc_<version>.dll` + pak/IoStore | **运行时不需要** | **内含，用户无需安装** | UE 运行时、窗口/输入/音频、Rendering Bridge、Unreal Renderer；加载 C++ 游戏逻辑 |
+| **REIM Runtime（开发构建）** | `Development`/Editor 构建 | 运行时不需要 | **开发机需要 UE 5.8.4** | 调试、Cook/Package、渲染/性能验证；不面向普通用户 |
 
-可选交付物：`HTCL Server`（同一 C++ 游戏逻辑的 headless 构建，用于测试/局域网/专用服务器；首版不属于客户端必需路径）。
+可选交付物：`REIM Server`（同一 C++ 游戏逻辑的 headless 构建，用于测试/局域网/专用服务器；首版不属于客户端必需路径）。
 
-> **唯一可启动目标**：HTCL Native Runtime。  
-> **Java Edition**：只作为规格、研究对象和转换输入，**不是 HTCL 的可启动游戏**。  
+> **唯一可启动目标**：REIM Native Runtime。  
+> **Java Edition**：只作为规格、研究对象和转换输入，**不是 REIM 的可启动游戏**。  
 > **用户侧**：只有 Shipping 发布包，没有 UE/Editor/JDK/MSVC/CMake/插件安装。开发/CI 侧才需要 UE 5.8.4 与工具链。详见 §3.0 与 `TECH_STACK.md`。
 
 ### 0.3 核心基线决策
 
 | 编号 | 决策 | 结论 |
 |---|---|---|
-| D-00 | **产品边界** | **HTCL 是 Minecraft Native Launcher，不启动 Java Edition/JVM 游戏。** Java Edition 只作为规格、研究对象、转换输入 |
+| D-00 | **产品边界** | **REIM 是 Minecraft Native Launcher，不启动 Java Edition/JVM 游戏。** Java Edition 只作为规格、研究对象、转换输入 |
 | D-01 | 产品形态 | Launcher、Converter/Native Toolchain、Native Runtime 是三个独立交付物，不打包成单个 exe |
 | D-02 | Launcher 技术形态 | 原生桌面应用（C++/Qt），不嵌入 UE、不承载游戏逻辑、不启动 Java Edition |
 | D-03 | Launcher 职责 | 账号、Minecraft 版本信息、本地 Java Edition 文件检测/准备、Native 化任务、Native 版本/实例/Runtime 管理、启动 Native Runtime、进程监管、日志/崩溃/更新 |
 | D-04 | Converter 技术形态 | 离线 CLI 流水线；JDK 只用于分析/数据生成/导出/差分 oracle；JDK 不是 Native Runtime 的运行时依赖 |
 | D-05 | Runtime 分发形态 | 用户侧是 **UE Shipping 打包产物**（自包含）；开发机/CI 才需要安装 UE 5.8.4 与 Editor/UBT |
-| D-06 | 输入 vs 可启动 | Java Edition 文件 = 输入/规格，**不可启动**；HTCL Native Runtime = **唯一可启动目标** |
+| D-06 | 输入 vs 可启动 | Java Edition 文件 = 输入/规格，**不可启动**；REIM Native Runtime = **唯一可启动目标** |
 | D-07 | Native 化输入 | 版本 JAR/JSON、libraries、assets、数据生成器报告、反编译源码（研究用）、运行行为（oracle）；**不预设某一种语法源** |
 | D-08 | Native 化方法 | **按子系统选择**：数据生成、差异/分析、选择性源码/字节码翻译、Native Adapter、手写原生、Patch、差分；不把“字节码→IR→C++”定为全局唯一方案 |
 | D-09 | Native 化范围 | 原版逻辑；不支持 Java Mod/Mixin/运行期字节码生成；封闭世界、固定入口 |
 | D-10 | 自动化边界 | “尽可能自动”不等于“完全自动”；不能用自动翻译硬碰渲染/平台/热路径/不可靠语义 |
 | D-11 | **渲染路线** | **R0 最小 Native Rendering 验证** → R1 区块+实体+基础环境 → R2 完整 Minecraft Renderer → R3 UE 高级增强。**R0 不是原版命令流/OpenGL 回放**。M1 允许开发期临时 C++ Renderer（GLFW/SDL3 + OpenGL）验证真实世界数据；它不是 R0、不进入发布，且与 UE Renderer 共用同一 Runtime/Rendering Contract |
-| D-12 | UE 职责 | UE 是 **Native Runtime 的宿主与渲染后端**，不是整个 HTCL 产品的宿主；不接管游戏规则、物理、AI、世界模拟、网络权威 |
+| D-12 | UE 职责 | UE 是 **Native Runtime 的宿主与渲染后端**，不是整个 REIM 产品的宿主；不接管游戏规则、物理、AI、世界模拟、网络权威 |
 | D-13 | **线程模型** | 服务端模拟 **20 TPS**、客户端模拟 **20 TPS**，与渲染 FPS（60/120/144+）解耦；UE GT 按帧消费不可变快照；世界状态不绑定渲染帧率 |
 | D-14 | Bridge | 版本化 POD/句柄/池化缓冲；C++ Runtime → Rendering Contract → Bridge → UE Renderer；快照/双缓冲/Dirty/增量/对象池/Chunk Mesh Cache；世界数据只在变更时传输 |
 | D-15 | 版本策略 | 每个 Native 构建绑定一个 MC profile；Launcher 可并存多个 Native 版本；版本更新走“分析→差异→生成/翻译/Patch→差分→发布”流水线 |
@@ -87,8 +87,8 @@ HTCL 是一个 **Minecraft Native Launcher**，同时包含一条 **Minecraft �
 
 **本版（4.0）修正（定稿）**：
 
-1. **产品边界**：HTCL 是 **Minecraft Native Launcher**，**不启动 Java Edition/JVM 游戏**；所有“启动原版/构造 classpath/javaw”职责删除。
-2. **输入 vs 可启动**：Java Edition 只作为规格、研究对象、转换输入；**唯一可启动目标是 HTCL Native Runtime**。
+1. **产品边界**：REIM 是 **Minecraft Native Launcher**，**不启动 Java Edition/JVM 游戏**；所有“启动原版/构造 classpath/javaw”职责删除。
+2. **输入 vs 可启动**：Java Edition 只作为规格、研究对象、转换输入；**唯一可启动目标是 REIM Native Runtime**。
 3. **Launcher 职责**：改为“检测/准备 Java Edition 文件 + 管理 Native 版本/实例/Runtime + 启动 Native Runtime”，不再管理 Java 游戏运行时。
 4. **R0 重定义**：R0 = **最小 Native Rendering 验证**（C++ Runtime → 最小 Contract → Bridge → UE），不是原版绘制命令/OpenGL 回放；路线改为 R0 → R1 → R2 → R3。
 5. **Tick/FPS 分离**：Minecraft 模拟固定 20 TPS；UE 渲染 60/120/144+ FPS；世界状态与渲染帧率解耦，快照/双缓冲/Dirty/增量/池化。
@@ -109,7 +109,7 @@ HTCL 是一个 **Minecraft Native Launcher**，同时包含一条 **Minecraft �
 
 ### 1.1 是什么
 
-- **一个 Minecraft Native Launcher**：检测、读取、准备用户自有的 Java Edition 文件；管理 Native 版本、实例、Runtime、资源和存档；**只启动 HTCL Native Runtime**。
+- **一个 Minecraft Native Launcher**：检测、读取、准备用户自有的 Java Edition 文件；管理 Native 版本、实例、Runtime、资源和存档；**只启动 REIM Native Runtime**。
 - **一个 Minecraft 专用 Native 化 / 转换工具链**：以 Java Edition 为输入和规格，产出可独立运行的 C++ 游戏逻辑模块；不是通用 Java→C++ 编译器。
 - **一个 C++ + UE 的 Native 游戏运行环境**：C++ Minecraft Runtime 负责游戏语义/世界状态；UE 负责最终图形与平台呈现。
 - **一个长期版本迁移体系**：Minecraft 更新后，工具链能分析差异、重新生成/翻译、重放 Patch、跑差分，而不是每次手工重写。
@@ -117,11 +117,11 @@ HTCL 是一个 **Minecraft Native Launcher**，同时包含一条 **Minecraft �
 **最终产品结构**
 
 ```text
-                         HTCL
+                         REIM
                           │
               ┌───────────┴───────────┐
               │                       │
-       HTCL Launcher            Native Toolchain
+       REIM Launcher            Native Toolchain
               │                       │
               │               Java Edition（输入/规格，不可启动）
               │                       │
@@ -131,7 +131,7 @@ HTCL 是一个 **Minecraft Native Launcher**，同时包含一条 **Minecraft �
               │                       │
               └───────────┬───────────┘
                           │
-                   HTCL Native Runtime
+                   REIM Native Runtime
                           │
               ┌───────────┴───────────┐
               │                       │
@@ -142,10 +142,10 @@ HTCL 是一个 **Minecraft Native Launcher**，同时包含一条 **Minecraft �
 
 ### 1.2 不是什么
 
-- **不是 Java Edition Launcher**：HTCL **不启动 Java Edition**、不构造 classpath、不启动 `javaw.exe`、不提供 Java 游戏实例的“开始游戏”按钮。
-- **不是“另一个 Minecraft 客户端”**：HTCL 是启动器产品；它启动的是 Native Runtime，不是原版 Java 客户端。
+- **不是 Java Edition Launcher**：REIM **不启动 Java Edition**、不构造 classpath、不启动 `javaw.exe`、不提供 Java 游戏实例的“开始游戏”按钮。
+- **不是“另一个 Minecraft 客户端”**：REIM 是启动器产品；它启动的是 Native Runtime，不是原版 Java 客户端。
 - **不是把 Java 客户端包一层 UE 窗口**：Native Runtime 不加载 JVM、不执行 Java 字节码、不依赖原版客户端进程。
-- **不是 Java Mod 加载器**：不承诺 Forge/Fabric/Mixin 的二进制兼容；需要 Java Mod 的用户应使用 Java Edition 启动器，而不是 HTCL。
+- **不是 Java Mod 加载器**：不承诺 Forge/Fabric/Mixin 的二进制兼容；需要 Java Mod 的用户应使用 Java Edition 启动器，而不是 REIM。
 - **不是 Mojang 代码/资产的再分发器**：产品不随包携带 Minecraft 代码、纹理、声音、模型；输入来自用户自有安装。
 - **不是通用 Java→C++ 编译器产品**：工具链只服务于 Minecraft 这一类封闭世界应用；不承诺转换任意 Java 程序。
 - **不是 UE 重写整个 Minecraft**：UE 不负责方块规则、红石、AI、物理、世界生成、存档、协议；这些属于 C++ Minecraft Runtime。
@@ -157,37 +157,37 @@ HTCL 是一个 **Minecraft Native Launcher**，同时包含一条 **Minecraft �
 1. 用户在 Launcher 中登录 Microsoft 账号（或使用离线模式），用于版本信息/授权文件获取。
 2. Launcher 检测用户本地的 Java Edition 安装，或让用户选择版本/目录；读取 version JSON、client.jar、libraries、assets。
 3. Launcher 校验版本/hash/完整性，记录为“转换输入源”。
-4. **到此为止：HTCL 不启动 Java Edition，不构造 classpath，不启动 JVM。**
+4. **到此为止：REIM 不启动 Java Edition，不构造 classpath，不启动 JVM。**
 
 **B. Native 化 / 获取 Native Runtime**
 
 1. 用户选择转换输入源（26.3）。
 2. Launcher 先检查是否存在匹配的 **官方预编译 Native Runtime**；存在则直接下载/安装/校验。
 3. 若不存在，开发者/高级用户可在 **Developer/Research Mode** 本地 Native 化：需要 JDK/MSVC/CMake，不需要 UE Editor。
-4. `htcl-convert` 分析、分类、生成/翻译/适配、编译出 `mc_26.3.dll` 与 manifest。
+4. `reim-convert` 分析、分类、生成/翻译/适配、编译出 `mc_26.3.dll` 与 manifest。
 5. 结果注册为 **Native Version**，显示验证/兼容报告。
 6. 普通用户不需要安装 VS/MSVC/SDK/CMake/JDK，也不需要现场编译 Minecraft。
 
 **C. 启动 Native Runtime**
 
 1. Launcher 校验 Native Runtime ABI、`mc_<version>.dll`、内容 manifest 与存档。
-2. 启动 `HTCLRuntime.exe --instance <dir> --manifest <manifest.json>`。
+2. 启动 `REIMRuntime.exe --instance <dir> --manifest <manifest.json>`。
 3. Runtime 加载 UE、加载 C++ 游戏逻辑、初始化渲染/输入/音频，进入游戏。
 4. C++ 游戏逻辑运行在 20 TPS 模拟线程；UE 按渲染 FPS 消费快照；进程由 Launcher 监管。
-5. **HTCL 只启动这一个游戏运行环境。**
+5. **REIM 只启动这一个游戏运行环境。**
 
 ### 1.4 成功标准
 
-- 用户能检测/准备自有 Java Edition 文件作为转换输入，且 HTCL 从不启动 Java Edition。
+- 用户能检测/准备自有 Java Edition 文件作为转换输入，且 REIM 从不启动 Java Edition。
 - 用户能安装/启动 Native Runtime，进入世界并完成基本玩法循环。
-- Native Runtime 能加载 26.3 世界、正确渲染、保存后原版仍可读取（存档兼容，不代表 HTCL 能启动原版）。
+- Native Runtime 能加载 26.3 世界、正确渲染、保存后原版仍可读取（存档兼容，不代表 REIM 能启动原版）。
 - 工具链对新版本能产出差异报告、重放 Patch、重新生成/翻译并跑通回归，而不是人工从零适配。
 - 渲染由 UE 完成；默认视觉尽量接近原版，允许明确标注的增强模式差异。
 - 关键路径不依赖 JVM、不依赖 Mojang 代码再分发。
 
 ### 1.5 非目标（首版）
 
-- **不提供启动 Java Edition/JVM 游戏的能力**；HTCL 不是 Java Edition Launcher。
+- **不提供启动 Java Edition/JVM 游戏的能力**；REIM 不是 Java Edition Launcher。
 - **不提供 Java 游戏实例/Java Mod 运行环境**；需要 Java Mod 的用户使用其他启动器。
 - 不支持 Java Mod/Mixin/Forge/Fabric；不支持 OptiFine/Iris shaderpack。
 - 不承诺任意历史版本的自动原生化；先以 26.3 为唯一 canonical profile。
@@ -298,20 +298,20 @@ HTCL 是一个 **Minecraft Native Launcher**，同时包含一条 **Minecraft �
 
 **结论：用户不需要安装 Unreal Engine，也不需要安装 Unreal Editor。**
 
-Unreal Engine 是 HTCL 的**开发、编译、Cook、Package 和 Runtime 基础**，不是用户侧运行环境。用户拿到的是 HTCL 发布的 **UE Shipping 打包产物**，不是 `.uproject`，也不是 Editor 工程。
+Unreal Engine 是 REIM 的**开发、编译、Cook、Package 和 Runtime 基础**，不是用户侧运行环境。用户拿到的是 REIM 发布的 **UE Shipping 打包产物**，不是 `.uproject`，也不是 Editor 工程。
 
 ```text
 开发/CI 侧：
   Unreal Engine 5.8.4 (Editor + UBT)
         ↓ Build / Cook / Stage / Package (Shipping)
-  HTCL Runtime 发布包
+  REIM Runtime 发布包
         ↓ 上传发布通道
 用户侧：
-  HTCL Launcher
+  REIM Launcher
         ↓ 下载 / 校验 / 解压 / 更新
-  HTCL Runtime 发布包（自包含）
+  REIM Runtime 发布包（自包含）
         ↓ 启动
-  HTCLRuntime.exe
+  REIMRuntime.exe
         ↓ 加载 mc_<version>.dll
   C++ Minecraft Runtime
         ↓ Rendering Contract / Bridge
@@ -322,11 +322,11 @@ Unreal Engine 是 HTCL 的**开发、编译、Cook、Package 和 Runtime 基础*
 |---|---|---|---|
 | 开发机 | **是**（UE 5.8.4 + Editor/UBT） | 编译、Cook、Package、调试、渲染/性能验证 | Development/Editor |
 | CI 构建机 | **是**（固定镜像） | 可复现的 Shipping 打包、自动化测试 | Shipping（+ Development 冒烟） |
-| 用户机 | **否** | 只运行 HTCL Runtime 发布包 | Shipping |
+| 用户机 | **否** | 只运行 REIM Runtime 发布包 | Shipping |
 
 **Runtime 发布包应包含**
 
-- `HTCLRuntime.exe`（Shipping 可执行文件）；
+- `REIMRuntime.exe`（Shipping 可执行文件）；
 - Cooked 内容：`.pak` / `.utoc` / `.ucas`（按项目是否启用 IoStore）；
 - `mc_<version>.dll`（C++ 游戏逻辑）与 manifest；
 - 必要的配置、图标、许可证/声明；
@@ -370,19 +370,19 @@ Unreal Engine 是 HTCL 的**开发、编译、Cook、Package 和 Runtime 基础*
 ```mermaid
 flowchart TB
   subgraph USER["用户机器"]
-    L["HTCL Launcher<br/>Qt/C++ 桌面应用<br/>无 UE / 无游戏逻辑"]
+    L["REIM Launcher<br/>Qt/C++ 桌面应用<br/>无 UE / 无游戏逻辑"]
 
     subgraph CONV["原生化阶段（离线）"]
-      C1["htcl-convert.exe<br/>C++ 编排"]
-      C2["htcl-analyze.jar<br/>JDK 25 + ASM + Vineflower"]
+      C1["reim-convert.exe<br/>C++ 编排"]
+      C2["reim-analyze.jar<br/>JDK 25 + ASM + Vineflower"]
       C3["原生化流水线<br/>生成 / 选择性翻译 / 适配"]
-      C4["htcl-build<br/>CMake/MSVC"]
-      C5["htcl-verify<br/>差分/截图/oracle"]
+      C4["reim-build<br/>CMake/MSVC"]
+      C5["reim-verify<br/>差分/截图/oracle"]
       C1 --> C2 --> C3 --> C4 --> C5
     end
 
     subgraph PLAY["运行阶段"]
-      R["HTCLRuntime.exe<br/>UE Shipping 发布包<br/>用户无需安装 UE"]
+      R["REIMRuntime.exe<br/>UE Shipping 发布包<br/>用户无需安装 UE"]
       D["mc_<version>.dll<br/>C++ 游戏逻辑<br/>C ABI"]
       R <-->|"C ABI / 进程内"| D
     end
@@ -414,7 +414,7 @@ flowchart TB
 
 ### 3.2 职责边界矩阵
 
-| 能力 | HTCL Launcher | HTCL Converter | HTCL Runtime (UE Shipping) | 游戏 DLL（Native 逻辑） | Java Edition（输入/规格） |
+| 能力 | REIM Launcher | REIM Converter | REIM Runtime (UE Shipping) | 游戏 DLL（Native 逻辑） | Java Edition（输入/规格） |
 |---|---|---|---|---|---|
 | 账号/MS 登录 | **拥有** | 读取凭据用于验证 | 接收启动参数 | 接收玩家身份 | — |
 | 版本信息/文件校验 | **拥有**（检测/读取用户自有文件） | 读取输入 | 读取 manifest | 读取 manifest | **文件来源** |
@@ -502,7 +502,7 @@ flowchart TB
 ```text
 校验 manifest/ABI/DLL hash/content
 → 准备 Native 实例目录/存档锁/日志
-→ 启动 HTCLRuntime.exe
+→ 启动 REIMRuntime.exe
 → Runtime 初始化 UE → 加载 DLL
 → DLL 启动服务端模拟线程（20 TPS）与客户端模拟线程（20 TPS）
 → 宿主 Game Thread 按渲染 FPS 获取最新不可变快照/增量 → SceneProxy/UI/音频
@@ -520,20 +520,20 @@ flowchart TB
 ### 3.5 建议目录结构
 
 ```text
-HTCL/
+Minecraft Reimagined Launcher/
 ├─ launcher/                     # Qt/C++ Launcher
 │  ├─ app/                       # UI/导航/设置
 │  ├─ core/                      # Java Edition 输入/Native 版本/实例/账号/下载/启动
-│  └─ convert/                   # 原生化任务编排（调用 htcl-convert）
+│  └─ convert/                   # 原生化任务编排（调用 reim-convert）
 ├─ converter/
-│  ├─ orchestrator/              # htcl-convert.exe（C++）
-│  ├─ java-analyzer/             # htcl-analyze.jar（JDK 25 + ASM/Vineflower）
+│  ├─ orchestrator/              # reim-convert.exe（C++）
+│  ├─ java-analyzer/             # reim-analyze.jar（JDK 25 + ASM/Vineflower）
 │  ├─ translate/                 # 选择性翻译/代码生成（C++）
 │  ├─ adapters/                  # 库替换、平台绑定、渲染适配
 │  ├─ patches/                   # 按 MC 版本的专用补丁集
 │  └─ verify/                    # 差分/截图/报告
 ├─ runtime/
-│  ├─ host/                      # UE 5.8.4 工程（HTCLRuntime）
+│  ├─ host/                      # UE 5.8.4 工程（REIMRuntime）
 │  ├─ contract/                  # Runtime Host ↔ Native DLL 的 C ABI
 │  ├─ jrt/                       # Java Runtime Support（C++）
 │  ├─ mc-native/                 # 手写原生子系统（必要时）
@@ -551,14 +551,14 @@ HTCL/
 |---|---|---|
 | Launcher 安装包 | Qt 运行库、Launcher、更新器 | 独立更新 |
 | Java Edition 输入文件 | 用户自有/官方渠道获取；只作转换输入，不随产品分发，**不作为可启动版本** | 按用户安装 |
-| Converter 包 | `htcl-convert`、`htcl-analyze.jar`、ASM/Vineflower、CMake 脚本、补丁集 | 随工具链更新 |
-| Native Runtime 包 | `HTCLRuntime.exe`、UE pak、渲染器材质/shader、基础字体/UI、`mc_<version>.dll`、manifest | 随 UE/Native 版本更新 |
+| Converter 包 | `reim-convert`、`reim-analyze.jar`、ASM/Vineflower、CMake 脚本、补丁集 | 随工具链更新 |
+| Native Runtime 包 | `REIMRuntime.exe`、UE pak、渲染器材质/shader、基础字体/UI、`mc_<version>.dll`、manifest | 随 UE/Native 版本更新 |
 | Native 版本包 | `mc_<version>.dll`、manifest、生成内容元数据、验证报告 | 按 MC 版本/转换生成 |
 | 用户资产缓存 | 从用户自有 JAR 导入的纹理/声音/语言/模型 | 按用户资源包 |
 
 ---
 
-## 4. HTCL Launcher
+## 4. REIM Launcher
 
 ### 4.1 职责
 
@@ -570,7 +570,7 @@ HTCL/
 6. **Native 版本管理**：安装、更新、删除、校验、修复 Native Runtime/Native Version。
 7. **Native 实例管理**：目录、配置、资源包/数据包、存档、备份、锁。
 8. **Native Runtime 配置**：内存/渲染/输入/音频/语言/实例参数。
-9. **启动 HTCL Runtime**：校验 ABI/manifest/DLL/content，启动 `HTCLRuntime.exe`。
+9. **启动 REIM Runtime**：校验 ABI/manifest/DLL/content，启动 `REIMRuntime.exe`。
 10. **Runtime 进程监管**：生命周期、退出码、日志、崩溃、Job Object。
 11. **日志、崩溃与更新**：Launcher 自更新、Converter/Native Runtime 组件更新、版本通道。
 
@@ -624,7 +624,7 @@ NativeInstance                    # 启动单位
 3. 校验 hash/大小/规则；记录 source path、版本号、hash。
 4. 标记为 `JavaEditionSource`（转换输入），显示“可用于 Native 化”，**不显示启动入口**。
 5. 不构造 classpath、不解压 natives 用于启动、不设置 JVM 参数、不启动 Java 进程。
-6. 若文件缺失/损坏，提示用户修复 Java Edition 安装或重新选择目录；HTCL 不代替 Java Edition 启动器运行它。
+6. 若文件缺失/损坏，提示用户修复 Java Edition 安装或重新选择目录；REIM 不代替 Java Edition 启动器运行它。
 
 ### 4.4 Native 化任务与 Runtime 获取
 
@@ -718,7 +718,7 @@ queued → validating → analyzing → diffing → producing
 
 **“原生化”不是“通用 Java→C++ 编译器”。**
 
-HTCL 要解决的问题是：
+REIM 要解决的问题是：
 
 > 如何把 Minecraft Java Edition 的已有实现、数据和版本变化，**持续、尽可能自动化地**变成可独立运行的 C++ Minecraft Runtime，并保持与 Vanilla 的行为一致。
 
@@ -826,7 +826,7 @@ HTCL 要解决的问题是：
 
 #### H. 其他路线（评估后不采用为全局方案）
 
-- **GraalVM native-image**：能把原版编译成原生可执行文件，但产物不是 C++，且 SubstrateVM/反射/Mixin 约束；可作为可行性对照/应急研究，不作为 HTCL Runtime 形态。
+- **GraalVM native-image**：能把原版编译成原生可执行文件，但产物不是 C++，且 SubstrateVM/反射/Mixin 约束；可作为可行性对照/应急研究，不作为 REIM Runtime 形态。
 - **通用 Java→C++ 编译器**：GCJ 不产 C++；JTransc 已归档；通用方案范围失控。不作为产品目标。
 - **JVM sidecar / 嵌入式 JVM**：与“运行时无 JVM”“C++ 原生”目标冲突；只可作为开发期 oracle。
 - **逐行手写整个 Minecraft**：成本过高，且失去“原生化工具链”的产品核心；只作为局部兜底。
@@ -902,7 +902,7 @@ D7 打包
 
 ### 5.4 候选分支：Java 语义映射（仅适用于翻译 + Runtime Support）
 
-> 本节内容只在 D3 选择“B/C 翻译 + JRT”时适用；纯代码生成（E）、手写原生（G）或库替换不需要完整 JRT。不要把本节当成“HTCL 必须实现完整 JVM”的依据。
+> 本节内容只在 D3 选择“B/C 翻译 + JRT”时适用；纯代码生成（E）、手写原生（G）或库替换不需要完整 JRT。不要把本节当成“REIM 必须实现完整 JVM”的依据。
 
 #### 5.4.0 JRT 的定位：迁移基础设施，不是长期 JVM
 
@@ -1290,25 +1290,25 @@ Java 异常是控制流，必须保持语义：
 
 ### 5.11 Horizon 参考：借鉴方法，不复制实现
 
-> Horizon（<https://github.com/horizon-rust/horizon>、<https://playhorizon.dev/>，Minecraft Java Edition 26.3 的 Rust 原生重实现）是当前最接近“无 JVM 运行原版”的公开项目。HTCL 只借鉴它解决问题的方法，不复制代码、crate 架构、渲染器或 Mod API。参考文档：`docs/native-client.md`、`docs/launcher-preparation.md`、`docs/parity-workflow.md`、`docs/version-ports.md`、`docs/versioning.md`。
+> Horizon（<https://github.com/horizon-rust/horizon>、<https://playhorizon.dev/>，Minecraft Java Edition 26.3 的 Rust 原生重实现）是当前最接近“无 JVM 运行原版”的公开项目。REIM 只借鉴它解决问题的方法，不复制代码、crate 架构、渲染器或 Mod API。参考文档：`docs/native-client.md`、`docs/launcher-preparation.md`、`docs/parity-workflow.md`、`docs/version-ports.md`、`docs/versioning.md`。
 
 **Horizon 的做法（公开资料整理）**
 
-| 方面 | Horizon 的做法 | 对 HTCL 的启示 |
+| 方面 | Horizon 的做法 | 对 REIM 的启示 |
 |---|---|---|
-| 项目组织 | Rust workspace；`horizon-client`、`horizon-gameplay`、`horizon-world`、`horizon-protocol`、`horizon-command`、`horizon-client-render`、`horizon-prepare`、`horizon-launcher`、`horizon-server` 等；按“功能 → 文件 → harness”组织文档 | HTCL 可用 C++ 模块 + 明确 harness 映射；不照搬 crate 划分 |
-| Launcher 与游戏 | Launcher 负责安装/更新/启动 **Native 游戏**；不启动 Java Edition；游戏是独立原生程序；launcher 不承载游戏逻辑 | 与 HTCL 的 Launcher/Native Runtime 分层一致；HTCL 只启动 Native Runtime |
+| 项目组织 | Rust workspace；`horizon-client`、`horizon-gameplay`、`horizon-world`、`horizon-protocol`、`horizon-command`、`horizon-client-render`、`horizon-prepare`、`horizon-launcher`、`horizon-server` 等；按“功能 → 文件 → harness”组织文档 | REIM 可用 C++ 模块 + 明确 harness 映射；不照搬 crate 划分 |
+| Launcher 与游戏 | Launcher 负责安装/更新/启动 **Native 游戏**；不启动 Java Edition；游戏是独立原生程序；launcher 不承载游戏逻辑 | 与 REIM 的 Launcher/Native Runtime 分层一致；REIM 只启动 Native Runtime |
 | 用户文件准备 | `horizon-prepare` 使用用户自有 26.3 安装：版本 JSON、client.jar、libraries、assets；用 JDK 25 跑数据生成器和 Java 导出器；校验 `research-lock.json`；不下载/不提交/不分发 Mojang JAR | **直接借鉴**：本地准备、pinned inputs、hash 校验、JDK 仅准备阶段 |
 | Java→Native 方法 | **不是 Java→Rust 翻译器**：手写 Rust 原生实现；Java 只做 oracle/导出器/数据生成；类清单 + 规范化字节码 hash 做 diff；port ledger 记录 vanilla 方法 ↔ Rust 函数 | **关键借鉴**：原生化是“研究 + 原生实现 + 差分”，翻译只是可选加速器 |
 | 版本研究 | 以 Vanilla 为规格；反编译只用于阅读；oracle 调用 vanilla 自身类；不把反编译代码提交/发布 | **直接借鉴**：法律与工程上都把反编译隔离在研究侧 |
 | Differential Testing | 约 300 个 `tools/test_*_parity.py`；每个 harness 对比 Rust probe 与 Java oracle；记录依赖；失败最小化 | **直接借鉴**：差分是验收核心，不是补充 |
-| 版本更新 | `detect → prepare NEW → diff OLD..NEW → regenerate → harnesses → port report → ranked work items → port/pin bump`；数据/协议/注册表/资源/类分别 diff；只反编译变更类 | **直接借鉴**：HTCL 的版本列车按同样阶段设计，但产物是 C++/UE Runtime |
-| 资源 | 用户自有资源包/数据包；atlas/models/sounds/lang；自有 shader 体系；资源包兼容有测试 | 借鉴“用户资源 + 解析/测试”；HTCL 的 shader 由 UE 材质/映射替代，不复制其 WGSL |
-| 存档 | Anvil、datafix、round-trip/reopen harness；旧版本兼容 | 借鉴“存档往返 + 差分”；HTCL 保留 Anvil/NBT 设计 |
-| Mod | 自有 native mod / data/content mod 体系；不支持 Java Mod/Mixin | 借鉴“明确边界 + 自有扩展”；HTCL 首版不做 Java Mod，原生扩展后置 |
-| 性能 | 原生渲染、GPU 遮挡/LOD、异步网格、benchmark 对照 vanilla | 借鉴“基准/对照方法”；HTCL 用 UE Renderer，不复制其渲染实现 |
-| 无 JVM 运行 | 原生实现 + 准备阶段导出的数据；运行时不加载 JVM | **核心目标一致**；HTCL 运行时同样无 JVM |
-| 分发 | Launcher 安装/更新原生程序；用户不需要 Rust/Java 运行时/开发工具 | HTCL User Mode 同样不需要 JDK/MSVC/CMake/UE；只拿 Shipping Native Runtime |
+| 版本更新 | `detect → prepare NEW → diff OLD..NEW → regenerate → harnesses → port report → ranked work items → port/pin bump`；数据/协议/注册表/资源/类分别 diff；只反编译变更类 | **直接借鉴**：REIM 的版本列车按同样阶段设计，但产物是 C++/UE Runtime |
+| 资源 | 用户自有资源包/数据包；atlas/models/sounds/lang；自有 shader 体系；资源包兼容有测试 | 借鉴“用户资源 + 解析/测试”；REIM 的 shader 由 UE 材质/映射替代，不复制其 WGSL |
+| 存档 | Anvil、datafix、round-trip/reopen harness；旧版本兼容 | 借鉴“存档往返 + 差分”；REIM 保留 Anvil/NBT 设计 |
+| Mod | 自有 native mod / data/content mod 体系；不支持 Java Mod/Mixin | 借鉴“明确边界 + 自有扩展”；REIM 首版不做 Java Mod，原生扩展后置 |
+| 性能 | 原生渲染、GPU 遮挡/LOD、异步网格、benchmark 对照 vanilla | 借鉴“基准/对照方法”；REIM 用 UE Renderer，不复制其渲染实现 |
+| 无 JVM 运行 | 原生实现 + 准备阶段导出的数据；运行时不加载 JVM | **核心目标一致**；REIM 运行时同样无 JVM |
+| 分发 | Launcher 安装/更新原生程序；用户不需要 Rust/Java 运行时/开发工具 | REIM User Mode 同样不需要 JDK/MSVC/CMake/UE；只拿 Shipping Native Runtime |
 
 **为什么 Horizon 能在没有 Java Runtime 的情况下运行**
 
@@ -1317,7 +1317,7 @@ Java 异常是控制流，必须保持语义：
 3. 准备阶段把用户自有 JAR 中的数据/资源导出成原生程序可读的格式；运行时不读 JAR、不启动 JVM。
 4. 行为正确性靠 **differential harness** 保证，而不是靠“翻译后看起来一样”。
 
-**HTCL 应借鉴的**
+**REIM 应借鉴的**
 
 - 用户自有文件 + 本地准备 + pinned hash；不随包分发 Mojang 代码/资产。
 - 数据生成器/导出器 + 生成表；类清单/规范化字节码 hash + diff；port ledger。
@@ -1325,25 +1325,25 @@ Java 异常是控制流，必须保持语义：
 - 资源包/存档/协议的逐项兼容测试；no-JVM 运行时。
 - 明确区分“研究侧反编译”与“发布侧产物”。
 
-**HTCL 明确不能照搬的**
+**REIM 明确不能照搬的**
 
-- **语言/架构**：Horizon 是 Rust workspace；HTCL 是 C++20 + UE，不复制 crate 划分/代码。
-- **渲染器**：Horizon 自带 wgpu/Vulkan/Metal/DX12 渲染器；HTCL 用 **Unreal Renderer**，通过 Rendering Bridge 接管。
-- **“只手写”路线**：Horizon 以手写原生为主；HTCL 允许选择性翻译/代码生成/JRT，但必须以差分证明。
-- **Mod API/运行时**：不复制 Horizon 的 native/WASM Mod 体系；HTCL 的扩展模型另定。
+- **语言/架构**：Horizon 是 Rust workspace；REIM 是 C++20 + UE，不复制 crate 划分/代码。
+- **渲染器**：Horizon 自带 wgpu/Vulkan/Metal/DX12 渲染器；REIM 用 **Unreal Renderer**，通过 Rendering Bridge 接管。
+- **“只手写”路线**：Horizon 以手写原生为主；REIM 允许选择性翻译/代码生成/JRT，但必须以差分证明。
+- **Mod API/运行时**：不复制 Horizon 的 native/WASM Mod 体系；REIM 的扩展模型另定。
 - **Launcher/发布/版本号/网站**：不复制其 launcher UI、Nightly 发布节奏、站点/品牌。
-- **法律措辞**：Horizon 是 clean-room 原生重实现；HTCL 若做字节码翻译，衍生作品风险更高，必须单独法律评审。
+- **法律措辞**：Horizon 是 clean-room 原生重实现；REIM 若做字节码翻译，衍生作品风险更高，必须单独法律评审。
 - **具体数据/协议/资源实现**：不复制其 Rust 代码、生成表、WGSL shader、datafix 实现。
 
-**HTCL 的差异定位**
+**REIM 的差异定位**
 
 ```text
 Horizon：Vanilla 行为研究 → 手写 Rust 原生 → 差分验证 → 原生渲染器
-HTCL：   Vanilla 行为/数据/类分析 → 生成/选择性翻译/原生适配 → C++ Runtime
+REIM：   Vanilla 行为/数据/类分析 → 生成/选择性翻译/原生适配 → C++ Runtime
         → Rendering Bridge → Unreal Renderer → 差分 + 截图验证
 ```
 
-> HTCL 不是 Horizon 的 C++ 复刻；相同点是“用户自有文件、无 JVM 运行时、差分驱动、版本工具链、Launcher 只启动 Native 游戏”，不同点是“C++ + UE 渲染 + 可选翻译/JRT + Launcher 产品化 + **不启动 Java Edition**”。
+> REIM 不是 Horizon 的 C++ 复刻；相同点是“用户自有文件、无 JVM 运行时、差分驱动、版本工具链、Launcher 只启动 Native 游戏”，不同点是“C++ + UE 渲染 + 可选翻译/JRT + Launcher 产品化 + **不启动 Java Edition**”。
 
 ---
 
@@ -1353,9 +1353,9 @@ HTCL：   Vanilla 行为/数据/类分析 → 生成/选择性翻译/原生适�
 
 ```text
 ┌─────────────────────────────────────────────────────────┐
-│ HTCLRuntime.exe（UE 5.8.4 Shipping 发布包；用户无需安装 UE） │
-│  HTCLGame / HTCLBridge / HTCLRenderer / HTCLUI /        │
-│  HTCLAudio / HTCLInput / HTCLAssets / 平台服务           │
+│ REIMRuntime.exe（UE 5.8.4 Shipping 发布包；用户无需安装 UE） │
+│  REIMGame / REIMBridge / REIMRenderer / REIMUI /        │
+│  REIMAudio / REIMInput / REIMAssets / 平台服务           │
 ├─────────────────────────────────────────────────────────┤
 │ C ABI（contract/，版本化 POD/句柄/回调/线程契约）         │
 ├─────────────────────────────────────────────────────────┤
@@ -1539,7 +1539,7 @@ L4 原生图形 API
 | 方案 | 接管点 | 保留原版逻辑 | UE 参与度 | 工作量 | 保真度 | 结论 |
 |---|---|---|---|---|---|---|
 | A | L3 GpuDevice | 几乎全部 | 仅作为 GPU 后端 | 极高 | 高 | 不推荐 |
-| B | L2 命令流/绘制命令 | 原版渲染逻辑 | 网格/材质/GPU | 中 | 高 | **拒绝**：会形成 OpenGL/LWJGL 兼容层，不是 HTCL 架构 |
+| B | L2 命令流/绘制命令 | 原版渲染逻辑 | 网格/材质/GPU | 中 | 高 | **拒绝**：会形成 OpenGL/LWJGL 兼容层，不是 REIM 架构 |
 | C | L1 场景接管 | 游戏逻辑 | 场景/材质/后处理 | 高 | 中高 | **R1/R2 目标** |
 | D | L0 全量重写 | 仅逻辑 | 全部 | 极高 | 风险高 | 不做 |
 
@@ -1758,31 +1758,31 @@ UE Render Thread:
 
 ```text
 Launcher ── CLI / IPC / manifest / files ──> Converter
-Launcher ── process / args / manifest / logs ──> HTCL Runtime
+Launcher ── process / args / manifest / logs ──> REIM Runtime
 
-HTCL Runtime Host ── Versioned C ABI ──> Native Minecraft DLL
+REIM Runtime Host ── Versioned C ABI ──> Native Minecraft DLL
 ```
 
 - **C ABI 只用于 Runtime Host ↔ Native Minecraft DLL**。
 - Launcher ↔ Converter 不需要 C ABI；用 CLI、IPC、manifest、文件。
 - Launcher ↔ Runtime 不需要 C ABI；用进程参数、manifest、日志/状态 IPC。
-- C ABI 不是整个 HTCL 的“唯一通信方式”。
+- C ABI 不是整个 REIM 的“唯一通信方式”。
 
 ### 8.2 C ABI 契约（示意）
 
 ```c
-#define HTCL_ABI_VERSION 1
+#define REIM_ABI_VERSION 1
 
-typedef struct HtclInstanceConfig {
+typedef struct ReimInstanceConfig {
   const wchar_t* instance_dir;
   const wchar_t* manifest_path;
   const wchar_t* player_name;      // UTF-16
   const wchar_t* player_uuid;
   uint32_t       render_level;     // R0/R1/R2/R3
   uint32_t       flags;
-} HtclInstanceConfig;
+} ReimInstanceConfig;
 
-typedef struct HtclHostApi {
+typedef struct ReimHostApi {
   uint32_t struct_size;
   uint32_t abi_version;
 
@@ -1790,39 +1790,39 @@ typedef struct HtclHostApi {
   void   (*free)(void* ptr);
 
   void   (*log)(int level, const char* category, const char* utf8);
-  void   (*publish_audio)(const HtclAudioEvent*);
-  void   (*request_asset)(const HtclAssetRequest*);
+  void   (*publish_audio)(const ReimAudioEvent*);
+  void   (*request_asset)(const ReimAssetRequest*);
   void   (*on_fatal)(int code, const char* utf8);
   // ... 平台/设置/窗口/输入回调
-} HtclHostApi;
+} ReimHostApi;
 
-typedef struct HtclRuntimeApi {
+typedef struct ReimRuntimeApi {
   uint32_t struct_size;
   uint32_t abi_version;
 
-  HtclInstance* (*create)(const HtclInstanceConfig*, const HtclHostApi*);
-  void          (*destroy)(HtclInstance*);
+  ReimInstance* (*create)(const ReimInstanceConfig*, const ReimHostApi*);
+  void          (*destroy)(ReimInstance*);
 
-  int  (*start)(HtclInstance*);
-  void (*stop)(HtclInstance*);
+  int  (*start)(ReimInstance*);
+  void (*stop)(ReimInstance*);
 
   // start 后 DLL 内部启动服务端/客户端模拟线程（固定 20 TPS）；
   // 宿主不按帧回调模拟；渲染帧由 GT 主动 fetch。
   // GT 调用：获取最新不可变渲染快照（不是逐帧世界复制）
-  int  (*fetch_frame)(HtclInstance*, HtclRenderFrame* out);
+  int  (*fetch_frame)(ReimInstance*, ReimRenderFrame* out);
 
   // 任意线程：输入/设置/UI 动作（内部队列，模拟线程下一 tick 应用）
-  void (*submit_input)(HtclInstance*, const HtclInputEvent*);
-  void (*submit_action)(HtclInstance*, const HtclAction*);
+  void (*submit_input)(ReimInstance*, const ReimInputEvent*);
+  void (*submit_action)(ReimInstance*, const ReimAction*);
 
   // 可选：暂停/恢复模拟（不改变渲染 FPS）
-  void (*set_simulation_paused)(HtclInstance*, bool paused);
+  void (*set_simulation_paused)(ReimInstance*, bool paused);
 
   // 服务端/客户端模拟线程由 DLL 内部管理；可选 headless 模式
   // ...
-} HtclRuntimeApi;
+} ReimRuntimeApi;
 
-HTCL_EXPORT const HtclRuntimeApi* htcl_get_api(uint32_t abi_version);
+REIM_EXPORT const ReimRuntimeApi* reim_get_api(uint32_t abi_version);
 ```
 
 **规则**
@@ -1837,7 +1837,7 @@ HTCL_EXPORT const HtclRuntimeApi* htcl_get_api(uint32_t abi_version);
 ### 8.3 渲染快照契约
 
 ```text
-HtclRenderFrame
+ReimRenderFrame
   ├─ frame_id / tick / partial_tick
   ├─ CameraSnapshot
   ├─ PlayerSnapshot
@@ -1854,7 +1854,7 @@ HtclRenderFrame
 - Section/实体/UI 都有修订号/世代号；过期更新丢弃；
 - 网格/顶点缓冲所有权转移；GPU 上传后归还池；
 - UI/音频事件不因网格积压丢失；
-- 快照/增量可序列化为 `.htclbridge` 录制，用于无 UE 测试/回放/崩溃复现；
+- 快照/增量可序列化为 `.reimbridge` 录制，用于无 UE 测试/回放/崩溃复现；
 - 快照有字节/数量上限；溢出丢最低优先级并触发重建；
 - 快照是**不可变**数据；GT 读取后不修改游戏世界。
 
@@ -1869,7 +1869,7 @@ HtclRenderFrame
 ### 8.5 加载与生命周期
 
 1. Runtime 校验 manifest/ABI/DLL hash/依赖；
-2. `LoadLibraryW` 加载 DLL；`GetProcAddress("htcl_get_api")`；
+2. `LoadLibraryW` 加载 DLL；`GetProcAddress("reim_get_api")`；
 3. 校验 ABI/能力；不匹配 → 明确错误；
 4. `create` → `start`；
 5. DLL 内部启动服务端/客户端模拟线程（20 TPS）；宿主 GT 通过 `fetch_frame` 获取快照；
@@ -1919,15 +1919,15 @@ HtclRenderFrame
 
 | 对象 | 首版 | 后续 | 说明 |
 |---|---|---|---|
-| **启动 Java Edition 26.3** | **否** | **否** | HTCL 是 Native Launcher，不提供 Java 启动 |
+| **启动 Java Edition 26.3** | **否** | **否** | REIM 是 Native Launcher，不提供 Java 启动 |
 | Java Edition 26.3 文件读取/准备 | 是 | — | 仅转换输入，不启动 |
 | Native Runtime 26.3 单机 | 是（分阶段） | — | M1→M2/M3 纵向切片 |
 | 原版 26.3 存档读写 | 是 | — | Anvil/NBT/实体/POI |
 | 旧存档 | 官方离线升级 | 有限原生迁移 | 不做完整 DFU |
 | 原版资源包 26.3 | 是（模型/纹理/声音/语言/UI） | shader 覆盖后续 | shader 首版不支持 |
 | 原版数据包 26.3 | 分阶段 | 完整命令/世界生成 | 依赖 Codec/命令实现 |
-| 原版客户端连 HTCL 服务端 | 否 | 多人阶段 | 协议 777/离线优先 |
-| HTCL 客户端连原版服务端 | 否 | 多人阶段（拉伸） | MS 登录/聊天签名 |
+| 原版客户端连 REIM 服务端 | 否 | 多人阶段 | 协议 777/离线优先 |
+| REIM 客户端连原版服务端 | 否 | 多人阶段（拉伸） | MS 登录/聊天签名 |
 | Java Mod/Mixin | 否 | 否 | JVM/ASM |
 | OptiFine/Iris | 否 | 独立项目 | GLSL/管线 |
 | 原生 C ABI 扩展 | 否 | 四阶段之后 | 内容/命令/事件 |
@@ -2000,16 +2000,16 @@ HtclRenderFrame
 
 ```text
 build/
-├─ launcher/HTCL.Launcher.exe
+├─ launcher/REIM.Launcher.exe
 ├─ converter/
-│  ├─ htcl-convert.exe
-│  ├─ htcl-janalyze.jar
-│  ├─ htcl-translate.exe
+│  ├─ reim-convert.exe
+│  ├─ reim-janalyze.jar
+│  ├─ reim-translate.exe
 │  └─ patches/
 ├─ runtime/
-│  ├─ HTCLRuntime.exe
-│  ├─ HTCLRuntime/Content/...
-│  └─ contract/htcl_abi.h
+│  ├─ REIMRuntime.exe
+│  ├─ REIMRuntime/Content/...
+│  └─ contract/reim_abi.h
 └─ native/26.3/
    ├─ mc_26.3.dll
    ├─ mc_26.3.pdb
@@ -2230,8 +2230,8 @@ build/
 
 ## 15. 架构一致性检查
 
-1. **“HTCL 是 Native Launcher” vs “HTCL 有 Native Runtime”**
-   - 不矛盾：Launcher 是产品入口；Native Runtime 是它启动的**唯一**游戏目标。HTCL 不是 Java Edition Launcher。
+1. **“REIM 是 Native Launcher” vs “REIM 有 Native Runtime”**
+   - 不矛盾：Launcher 是产品入口；Native Runtime 是它启动的**唯一**游戏目标。REIM 不是 Java Edition Launcher。
 
 2. **“运行时不依赖 JVM” vs “Converter 使用 JDK 25”**
    - 不矛盾：JDK 只在 Native 化/分析/数据生成/差分 oracle 使用；Native Runtime 不加载 JVM、不执行 Java 字节码。
@@ -2257,8 +2257,8 @@ build/
 9. **“单 profile” vs “Launcher 保留多个 Native 版本”**
    - 不矛盾：每个 Native 构建绑定一个 profile；Launcher 可并存多个构建；不同时在一个进程里跑多套玩法逻辑。
 
-10. **“Java Mod 不支持” vs “HTCL 不启动 Java Edition”**
-    - 不矛盾：HTCL 没有 Java 游戏模式；需要 Java Mod 的用户使用 Java Edition 启动器。HTCL 只支持 Native Runtime 的扩展模型（后续）。
+10. **“Java Mod 不支持” vs “REIM 不启动 Java Edition”**
+    - 不矛盾：REIM 没有 Java 游戏模式；需要 Java Mod 的用户使用 Java Edition 启动器。REIM 只支持 Native Runtime 的扩展模型（后续）。
 
 11. **“法律不允许分发 Mojang 代码” vs “Native Runtime 是 C++”**
     - 不矛盾但高风险：字节码翻译/官方预编译 Native Runtime 都可能构成衍生作品；本地 Native 化与官方预编译分发都必须法律评审；不随产品分发 Mojang 代码/资产。
@@ -2266,8 +2266,8 @@ build/
 12. **“UE 5.8.4 固定” vs “长期跟进 MC 版本”**
     - 不矛盾：MC profile 与 UE 版本解耦；Native Runtime/ABI 稳定，游戏 DLL 按 MC 版本更新；UE 升级走独立分支。
 
-13. **“Java Edition 是输入” vs “HTCL 是启动器”**
-    - 不矛盾：HTCL 启动的是 Native Runtime；Java Edition 文件只被读取/校验/转换，不可启动。
+13. **“Java Edition 是输入” vs “REIM 是启动器”**
+    - 不矛盾：REIM 启动的是 Native Runtime；Java Edition 文件只被读取/校验/转换，不可启动。
 
 14. **“JRT 存在” vs “不是 JVM”**
     - 不矛盾：JRT 是翻译分支的 C++ 兼容库，不做运行期 class loading/通用字节码解释；目标是逐步缩小，不是长期模拟完整 JVM。
@@ -2288,31 +2288,31 @@ build/
 > 仅说明边界，不是最终实现；实际以 `runtime/contract/` 版本化头文件为准。
 
 ```c
-typedef struct HtclSectionHandle {
+typedef struct ReimSectionHandle {
   uint16_t dimension;
   int32_t  x, y, z;
   uint32_t generation;
-} HtclSectionHandle;
+} ReimSectionHandle;
 
-typedef struct HtclCameraSnapshot {
+typedef struct ReimCameraSnapshot {
   float position[3];
   float rotation[2];
   float fov;
   float partial_tick;
   uint16_t dimension;
   uint32_t flags;        // underwater/spectator/...
-} HtclCameraSnapshot;
+} ReimCameraSnapshot;
 
-typedef struct HtclSectionMeshUpdate {
-  HtclSectionHandle section;
+typedef struct ReimSectionMeshUpdate {
+  ReimSectionHandle section;
   uint64_t revision;
   float bounds_min[3];
   float bounds_max[3];
   uint32_t layer_count;
-  HtclMeshLayer layers[4];  // solid/cutout/translucent/emissive
-  HtclBuffer vertices;      // 所有权转移
-  HtclBuffer indices;
-} HtclSectionMeshUpdate;
+  ReimMeshLayer layers[4];  // solid/cutout/translucent/emissive
+  ReimBuffer vertices;      // 所有权转移
+  ReimBuffer indices;
+} ReimSectionMeshUpdate;
 ```
 
 **顶点建议**
@@ -2436,9 +2436,9 @@ typedef struct HtclSectionMeshUpdate {
 
 | 术语 | 含义 |
 |---|---|
-| HTCL Launcher | 产品入口；检测/准备 Java Edition 输入；Native 版本/实例/账号/Runtime 管理；**只启动 Native Runtime** |
-| HTCL Converter / Native Toolchain | Minecraft Native 化工具链；离线运行，JDK 只用于分析/导出 |
-| HTCL Runtime | UE 5.8.4 Shipping 发布包（用户无需安装 UE）；**HTCL 唯一可启动目标** |
+| REIM Launcher | 产品入口；检测/准备 Java Edition 输入；Native 版本/实例/账号/Runtime 管理；**只启动 Native Runtime** |
+| REIM Converter / Native Toolchain | Minecraft Native 化工具链；离线运行，JDK 只用于分析/导出 |
+| REIM Runtime | UE 5.8.4 Shipping 发布包（用户无需安装 UE）；**REIM 唯一可启动目标** |
 | 游戏 DLL / mc_<version>.dll | Native 化后的 C++ 游戏逻辑；引擎无关，C ABI 导出 |
 | JRT | Java Runtime Support；翻译分支的兼容/迁移库，**不是完整 JVM**；目标逐步缩小 |
 | 闭世界 AOT | 所有类在构建期已知；不支持运行期类加载/字节码生成（翻译/生成分支的约束） |

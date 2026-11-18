@@ -1,4 +1,4 @@
-# HTCL 开发指南
+# REIM 开发指南
 
 > 配套文档：`ARCHITECTURE.md`（架构）、`TECH_STACK.md`（选型/UE 分发）、`ROADMAP.md`（阶段）、`COMPATIBILITY.md`（兼容矩阵）。  
 > 本文说明开发环境、仓库边界、构建方式、编码/ABI 规则和验收流程。
@@ -10,7 +10,7 @@
 | | 开发/CI 环境 | 用户环境 |
 |---|---|---|
 | Unreal Engine | **M2 起**需要 UE 5.8.4 + Editor/UBT | **不需要** |
-| JDK | **M1 起**需要 JDK 25（Converter 分析/准备） | **不需要**；HTCL 不启动 Java Edition |
+| JDK | **M1 起**需要 JDK 25（Converter 分析/准备） | **不需要**；REIM 不启动 Java Edition |
 | MSVC/CMake | **M1 起**需要 | 不需要 |
 | 产物 | Development/Shipping | **Shipping 发布包** |
 | 用途 | 编译/Cook/Package/调试/差分 | 只运行 |
@@ -18,17 +18,17 @@
 **规则**
 
 - 开发机负责编译、Cook、Package、差分、截图、性能。
-- 用户只拿 `HTCL Native Runtime` Shipping 发布包；不安装 UE、Editor、插件、源码、JDK、MSVC、CMake。
+- 用户只拿 `REIM Native Runtime` Shipping 发布包；不安装 UE、Editor、插件、源码、JDK、MSVC、CMake。
 - 不要把 Development 包、Editor 工程、`.uproject`、PDB 或未 Cook 的内容发给用户。
 - 干净机验收：未安装 UE/JDK/MSVC/CMake，只装 VC++ 运行库，启动 Shipping 包。
-- **HTCL 不启动 Java Edition**：没有 javaw/classpath/JVM 游戏路径；Java Edition 文件只作输入。
+- **REIM 不启动 Java Edition**：没有 javaw/classpath/JVM 游戏路径；Java Edition 文件只作输入。
 
 ---
 
 ## 2. 仓库布局（建议）
 
 ```text
-HTCL/
+Minecraft Reimagined Launcher/
 ├─ README.md
 ├─ docs/
 │  ├─ ARCHITECTURE.md
@@ -41,14 +41,14 @@ HTCL/
 │  ├─ core/                      # Java Edition 输入/Native 版本/实例/账号/Runtime/启动
 │  └─ convert/                   # 原生化任务编排
 ├─ converter/
-│  ├─ orchestrator/              # htcl-convert.exe
+│  ├─ orchestrator/              # reim-convert.exe
 │  ├─ java-analyzer/             # JDK 25 + ASM/Vineflower 分析/导出
 │  ├─ translate/                 # 选择性翻译/代码生成
 │  ├─ adapters/                  # 库替换/平台/渲染适配
 │  ├─ patches/                   # 按 MC 版本维护的 Patch 集
 │  └─ verify/                    # 差分/截图/报告
 ├─ runtime/
-│  ├─ host/                      # UE 5.8.4 工程（HTCLRuntime）
+│  ├─ host/                      # UE 5.8.4 工程（REIMRuntime）
 │  ├─ contract/                  # Runtime Host ↔ Native DLL 的 C ABI
 │  ├─ jrt/                       # Java Runtime Support（仅翻译分支）
 │  ├─ mc-native/                 # 手写原生子系统
@@ -97,7 +97,7 @@ HTCL/
 - 用户自有 26.3 Java Edition 文件：version JSON、client.jar、libraries、assets，用于 Converter 摄取/分析、数据提取和资源读取；
 - 至少一个 26.3 世界存档（`.minecraft/saves/...` 或自行创建的测试世界），用于加载真实区块与地形；
 - 26.3 server jar：用于运行官方数据生成器 `--reports`（生成注册表/方块表），也用于原版差分 oracle；若你已有可用的 reports，则可不重复生成；
-- 准备方式：用官方启动器安装/更新到 26.3，或使用你已有的 26.3 文件；这些文件只作为输入/规格，**HTCL 不启动 Java Edition**，也不得提交到仓库或随产品分发。
+- 准备方式：用官方启动器安装/更新到 26.3，或使用你已有的 26.3 文件；这些文件只作为输入/规格，**REIM 不启动 Java Edition**，也不得提交到仓库或随产品分发。
 
 **关于 Rider / Visual Studio**
 
@@ -127,17 +127,17 @@ HTCL/
 
 | 产物 | 工具 | 说明 |
 |---|---|---|
-| `HTCL.Launcher.exe` | CMake + MSVC + Qt | 不链接 UE/JRT |
-| `htcl-convert.exe` | CMake + MSVC | 不链接 UE |
-| `htcl-analyze.jar` | JDK 25 + ASM/Vineflower | 仅分析/导出；不进入 Runtime |
+| `REIM.Launcher.exe` | CMake + MSVC + Qt | 不链接 UE/JRT |
+| `reim-convert.exe` | CMake + MSVC | 不链接 UE |
+| `reim-analyze.jar` | JDK 25 + ASM/Vineflower | 仅分析/导出；不进入 Runtime |
 | `mc_<version>.dll` | CMake + MSVC | C++20；`/MD`；关闭 C++ 异常；无 UE |
-| `HTCLRuntime.exe` + pak | UBT + UAT `BuildCookRun` | UE 5.8.4；Shipping |
-| `contract/htcl_abi.h` | 纯 C 头文件 | **Runtime Host ↔ Native DLL** 的版本化 ABI；CI 校验 |
+| `REIMRuntime.exe` + pak | UBT + UAT `BuildCookRun` | UE 5.8.4；Shipping |
+| `contract/reim_abi.h` | 纯 C 头文件 | **Runtime Host ↔ Native DLL** 的版本化 ABI；CI 校验 |
 
 ### 4.1 UE 工程
 
-- `.uproject` + `Source/HTCLGame`、`HTCLBridge`、`HTCLRenderer`、`HTCLUI`、`HTCLAudio`、`HTCLInput`、`HTCLAssets`。
-- `HTCLGame` 使用空舞台地图；不把 Minecraft 世界对象变成 Actor/Component。
+- `.uproject` + `Source/REIMGame`、`REIMBridge`、`REIMRenderer`、`REIMUI`、`REIMAudio`、`REIMInput`、`REIMAssets`。
+- `REIMGame` 使用空舞台地图；不把 Minecraft 世界对象变成 Actor/Component。
 - 插件按需启用；Shipping 不包含 Editor-only 模块。
 - 资产引用通过编辑器/配置绑定；不在代码里硬编码资源路径。
 - 功能尽量组件化；组件挂到对应 Actor/Subsystem，便于统一管理。
@@ -148,10 +148,10 @@ HTCL/
 :: 路径按实际安装调整
 "C:\Program Files\Epic Games\UE_5.8\Engine\Build\BatchFiles\RunUAT.bat" ^
   BuildCookRun ^
-  -project="C:\HTCL\HTCL.uproject" ^
+  -project="C:\REIM\REIM.uproject" ^
   -noP4 -platform=Win64 -clientconfig=Shipping ^
   -cook -allmaps -build -stage -pak -archive ^
-  -archivedirectory="C:\Builds\HTCL"
+  -archivedirectory="C:\Builds\REIM"
 ```
 
 - 启用 IoStore 时按项目设置加 `-iostore`（产物 `.utoc`/`.ucas`）。
@@ -174,25 +174,25 @@ cmake --build build/runtime --config Release
 
 ## 5. Native 化工作流（Developer Mode）
 
-> 命令是**目标接口/示意**，随 `htcl-convert` 实现调整；当前仓库尚未实现。
+> 命令是**目标接口/示意**，随 `reim-convert` 实现调整；当前仓库尚未实现。
 > **User Mode 不走这里**：普通用户直接使用官方预编译 Native Runtime，不安装 JDK/MSVC/CMake、不编译。
 
 ```text
 # 1. 准备（JDK 25；用户自有 26.3 文件）
-htcl-convert prepare --profile 26.3 --minecraft-dir <用户安装> --out work/26.3
+reim-convert prepare --profile 26.3 --minecraft-dir <用户安装> --out work/26.3
 
 # 2. 分析/差异
-htcl-convert analyze --profile 26.3 --out work/26.3
-htcl-convert diff --old 26.2 --new 26.3 --out work/diff-26.2-26.3
+reim-convert analyze --profile 26.3 --out work/26.3
+reim-convert diff --old 26.2 --new 26.3 --out work/diff-26.2-26.3
 
 # 3. 分诊/产出（按子系统）
-htcl-convert produce --profile 26.3 --decisions config/decisions-26.3.json
+reim-convert produce --profile 26.3 --decisions config/decisions-26.3.json
 
 # 4. 构建 DLL
-htcl-convert build --profile 26.3 --out build/26.3
+reim-convert build --profile 26.3 --out build/26.3
 
 # 5. 差分/截图
-htcl-convert verify --profile 26.3 --cases tests/cases
+reim-convert verify --profile 26.3 --cases tests/cases
 
 # 6. 注册到 Launcher / 打包 Runtime
 ```

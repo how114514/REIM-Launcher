@@ -1,4 +1,4 @@
-# HTCL 技术选型与 Unreal 分发
+# REIM 技术选型与 Unreal 分发
 
 > 本文是 `ARCHITECTURE.md` 的配套文档，聚焦“每个交付物用什么技术”和“Unreal Engine 如何从开发环境变成用户可运行的 Runtime”。  
 > 基线：Minecraft Java Edition 26.3 / Unreal Engine 5.8.4 / Windows x64 首发。
@@ -7,13 +7,13 @@
 
 ## 1. 总原则
 
-HTCL 是 **Minecraft Native Launcher**，不是 Java Edition Launcher。Java Edition 文件只作输入/规格，不可启动。三个技术边界不能混为一谈：
+REIM 是 **Minecraft Native Launcher**，不是 Java Edition Launcher。Java Edition 文件只作输入/规格，不可启动。三个技术边界不能混为一谈：
 
 | 边界 | 产物 | 是否面向用户 | 是否依赖 UE | 是否依赖 JVM |
 |---|---|---|---|---|
-| **HTCL Launcher** | `HTCL.Launcher.exe` | 是 | 否 | **否**（JDK 只属于 Converter/Developer Mode） |
-| **HTCL Converter / Native Toolchain** | `htcl-convert.exe` + JVM 助手 | Developer/Research Mode | 否 | Native 化时需要 |
-| **HTCL Native Runtime** | UE **Shipping** 发布包 | 是（**唯一可启动目标**） | **内含，用户无需安装** | 运行时不需 |
+| **REIM Launcher** | `REIM.Launcher.exe` | 是 | 否 | **否**（JDK 只属于 Converter/Developer Mode） |
+| **REIM Converter / Native Toolchain** | `reim-convert.exe` + JVM 助手 | Developer/Research Mode | 否 | Native 化时需要 |
+| **REIM Native Runtime** | UE **Shipping** 发布包 | 是（**唯一可启动目标**） | **内含，用户无需安装** | 运行时不需 |
 | **C++ 游戏逻辑** | `mc_<version>.dll` | 随 Runtime 包 | 否 | 否 |
 
 **核心规则**
@@ -26,7 +26,7 @@ HTCL 是 **Minecraft Native Launcher**，不是 Java Edition Launcher。Java Edi
 
 ---
 
-## 2. HTCL Launcher
+## 2. REIM Launcher
 
 | 领域 | 选择 | 说明 |
 |---|---|---|
@@ -51,13 +51,13 @@ HTCL 是 **Minecraft Native Launcher**，不是 Java Edition Launcher。Java Edi
 
 ---
 
-## 3. HTCL Converter / Native Toolchain
+## 3. REIM Converter / Native Toolchain
 
 | 领域 | 选择 | 说明 |
 |---|---|---|
-| 编排 | C++20 CLI（`htcl-convert`） | 任务状态、缓存、日志、manifest |
+| 编排 | C++20 CLI（`reim-convert`） | 任务状态、缓存、日志、manifest |
 | 分析/导出 | Java 25（Temurin）+ ASM + Vineflower | 类清单、字节码 hash、反编译（人工阅读）、数据生成器、导出器 |
-| 翻译/生成 | C++20（`htcl-translate`/生成器） | 按子系统选择：源码/字节码/IR/代码生成 |
+| 翻译/生成 | C++20（`reim-translate`/生成器） | 按子系统选择：源码/字节码/IR/代码生成 |
 | Patch | 文本 Patch + 符号定位 | 按 MC 版本维护，可重放/三路合并 |
 | 构建 | CMake + MSVC 14.50 | 产出 `mc_<version>.dll`，不需要 UE |
 | 差分 | C++/Python + Java oracle | server/client harness、截图、存档往返、协议 trace |
@@ -79,7 +79,7 @@ HTCL 是 **Minecraft Native Launcher**，不是 Java Edition Launcher。Java Edi
 |---|---|---|
 | 语言 | C++20 | UBT 的 UE 侧也用 C++20 |
 | 构建 | CMake + MSVC 14.50 | `/MD`；关闭 C++ 异常；无 UE 头文件 |
-| 导出 | Runtime Host ↔ Native DLL 的 C ABI | `htcl_get_api`/POD/句柄/回调；不是 Launcher/Converter 通用协议 |
+| 导出 | Runtime Host ↔ Native DLL 的 C ABI | `reim_get_api`/POD/句柄/回调；不是 Launcher/Converter 通用协议 |
 | 并发 | std::thread/atomic + Asio | 服务端 20 TPS、客户端 20 TPS、worker pool、网络；模拟与渲染 FPS 独立 |
 | 压缩 | zlib-ng | Anvil/协议 |
 | 加密 | OpenSSL 3 | SHA/AES/RSA/SecureRandom |
@@ -98,7 +98,7 @@ HTCL 是 **Minecraft Native Launcher**，不是 Java Edition Launcher。Java Edi
 
 ---
 
-## 5. HTCL Runtime（UE 侧）
+## 5. REIM Runtime（UE 侧）
 
 | 领域 | 选择 | 说明 |
 |---|---|---|
@@ -115,13 +115,13 @@ HTCL 是 **Minecraft Native Launcher**，不是 Java Edition Launcher。Java Edi
 
 **UE 侧模块**
 
-- `HTCLGame`：生命周期、GameInstance/Subsystem、空舞台。
-- `HTCLBridge`：C ABI 适配、快照获取、模拟线程/GT 同步。
-- `HTCLRenderer`：SceneProxy、材质/Shader、RDG、后处理。
-- `HTCLUI`：Native UI 模型/绘制数据呈现（R0 不做，R1 最小 HUD，R2 完整，R3 可选 Slate）。
-- `HTCLAudio`：声音事件 → UE 音频。
-- `HTCLInput`：输入采集 → 客户端模拟线程。
-- `HTCLAssets`：资源包/纹理/音频/字体运行时加载。
+- `REIMGame`：生命周期、GameInstance/Subsystem、空舞台。
+- `REIMBridge`：C ABI 适配、快照获取、模拟线程/GT 同步。
+- `REIMRenderer`：SceneProxy、材质/Shader、RDG、后处理。
+- `REIMUI`：Native UI 模型/绘制数据呈现（R0 不做，R1 最小 HUD，R2 完整，R3 可选 Slate）。
+- `REIMAudio`：声音事件 → UE 音频。
+- `REIMInput`：输入采集 → 客户端模拟线程。
+- `REIMAssets`：资源包/纹理/音频/字体运行时加载。
 
 ---
 
@@ -130,16 +130,16 @@ HTCL 是 **Minecraft Native Launcher**，不是 Java Edition Launcher。Java Edi
 ### 6.1 结论
 
 **用户不需要安装 Unreal Engine 或 Unreal Editor。**  
-UE 是 HTCL 的开发、编译、Cook、Package 和 Runtime 基础；用户只运行 HTCL 发布的 **Shipping 打包产物**。
+UE 是 REIM 的开发、编译、Cook、Package 和 Runtime 基础；用户只运行 REIM 发布的 **Shipping 打包产物**。
 
 ```text
 开发/CI：
   UE 5.8.4 (Editor + UBT)
       ↓ Build / Cook / Stage / Package (Shipping)
-  HTCL Runtime 发布包
+  REIM Runtime 发布包
       ↓
 用户：
-  HTCL Launcher → HTCL Runtime 发布包 → HTCLRuntime.exe
+  REIM Launcher → REIM Runtime 发布包 → REIMRuntime.exe
 ```
 
 ### 6.2 Development vs Shipping
@@ -170,10 +170,10 @@ UE 的 UAT `BuildCookRun` 阶段：
 
 ```bat
 RunUAT.bat BuildCookRun ^
-  -project="C:\HTCL\HTCL.uproject" ^
+  -project="C:\REIM\REIM.uproject" ^
   -noP4 -platform=Win64 -clientconfig=Shipping ^
   -cook -allmaps -build -stage -pak -archive ^
-  -archivedirectory="C:\Builds\HTCL"
+  -archivedirectory="C:\Builds\REIM"
 ```
 
 - 启用 IoStore 时按项目设置加 `-iostore`；产物为 `.utoc`/`.ucas`。
@@ -199,14 +199,14 @@ RunUAT.bat BuildCookRun ^
 - 用户不安装插件、不打开 Editor、不访问插件市场。
 - Shipping 不包含 Editor-only 插件/模块；插件代码在打包时编译。
 - 插件/模块与 UE 5.8.4/包版本绑定；不做用户侧热插拔。
-- `RunUAT BuildPlugin` 是“把插件分发给其他 UE 开发者”的工具，不是 HTCL 用户侧安装方式；HTCL 的 Runtime 是完整游戏包。
+- `RunUAT BuildPlugin` 是“把插件分发给其他 UE 开发者”的工具，不是 REIM 用户侧安装方式；REIM 的 Runtime 是完整游戏包。
 
 ### 6.6 Runtime 发布包布局（建议）
 
 ```text
-HTCLRuntime/
-├─ HTCLRuntime.exe
-├─ HTCLRuntime/Content/Paks/...        # .pak / .utoc / .ucas
+REIMRuntime/
+├─ REIMRuntime.exe
+├─ REIMRuntime/Content/Paks/...        # .pak / .utoc / .ucas
 ├─ mc_<version>.dll
 ├─ manifest.json                       # 版本/ABI/内容 hash/能力
 ├─ Prerequisites/                      # app-local VC++ 运行库（可选）
@@ -299,7 +299,7 @@ HTCLRuntime/
 - Packaging Settings（Prerequisites 等）：<https://dev.epicgames.com/documentation/en-us/unreal-engine/using-the-packaging-settings-in-unreal-engine>
 - Hardware and Software Specifications（UE 5.8）：<https://dev.epicgames.com/documentation/en-us/unreal-engine/hardware-and-software-specifications-for-unreal-engine>
 - Plugins：<https://dev.epicgames.com/documentation/en-us/unreal-engine/plugins-in-unreal-engine>
-- BuildPlugin（面向 UE 开发者分发插件，不是 HTCL 用户安装方式）：<https://dev.epicgames.com/documentation/en-us/unreal-engine/unreal-automation-tool>
+- BuildPlugin（面向 UE 开发者分发插件，不是 REIM 用户安装方式）：<https://dev.epicgames.com/documentation/en-us/unreal-engine/unreal-automation-tool>
 
 **Horizon（方法参考，不复制实现）**
 

@@ -1,4 +1,4 @@
-# HTCL 兼容性说明
+# REIM 兼容性说明
 
 > 主版本基线：Minecraft Java Edition **26.3**（协议 777 / DataVersion 5023 / 资源包 97.1 / 数据包 121.0 / Java 25）。  
 > 运行时基线：UE **5.8.4 Shipping**（用户不安装 UE）。  
@@ -43,7 +43,7 @@
 
 | 对象 | 首版 | 后续 | 说明 |
 |---|---|---|---|
-| **启动 Java Edition 26.3** | **否** | **否** | HTCL 是 Native Launcher，不提供 Java 启动 |
+| **启动 Java Edition 26.3** | **否** | **否** | REIM 是 Native Launcher，不提供 Java 启动 |
 | Java Edition 26.3 文件读取/准备 | 是 | — | 仅转换输入，不启动 |
 | 原生化 26.3 单机 | 分阶段 | — | M1→M2/M3 纵向切片 |
 | 原版 26.3 存档读取 | 是 | — | Anvil/NBT/实体/POI/level.dat |
@@ -51,8 +51,8 @@
 | 旧存档 | 官方离线升级 | 有限原生迁移 | 不做完整 DFU |
 | 原版 26.3 资源包 | 是（模型/纹理/声音/语言/UI） | shader 覆盖后续 | shader 首版不支持 |
 | 原版 26.3 数据包 | 分阶段 | 完整命令/世界生成 | 依赖 Codec/命令实现 |
-| 原版客户端连 HTCL 服务端 | 否 | 多人阶段 | 协议 777；离线优先 |
-| HTCL 客户端连原版服务端 | 否 | 多人阶段（拉伸） | MS 登录/聊天签名 |
+| 原版客户端连 REIM 服务端 | 否 | 多人阶段 | 协议 777；离线优先 |
+| REIM 客户端连原版服务端 | 否 | 多人阶段（拉伸） | MS 登录/聊天签名 |
 | Java Mod/Mixin | 否 | 否 | JVM/ASM；明确非目标 |
 | OptiFine/Iris shaderpack | 否 | 独立项目 | GLSL/管线 |
 | 原生 C ABI 扩展 | 否 | 四阶段之后 | 内容/命令/事件 |
@@ -92,8 +92,8 @@
 - 压缩/VarInt/包上限；AES/CFB8 + RSA；Microsoft OAuth → Xbox Live/XSTS → Minecraft services。
 - 本地单机默认走同一 codec + 内存 transport；可保留 fast path 开关用于差分。
 - 多人顺序：
-  1. 原版 26.3 客户端连接 HTCL 服务端（离线优先）；
-  2. HTCL 客户端连接原版 26.3 服务端（MS 登录/聊天签名）；
+  1. 原版 26.3 客户端连接 REIM 服务端（离线优先）；
+  2. REIM 客户端连接原版 26.3 服务端（MS 登录/聊天签名）；
   3. 协议翻译（26.1/26.2 → 26.3 语义），不复制玩法逻辑。
 - 聊天签名/在线认证是独立里程碑；首版可离线优先/放宽服务端策略。
 - 验收：golden packet trace、原版客户端会话、fuzz、限速/恶意包。

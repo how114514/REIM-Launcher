@@ -1,4 +1,4 @@
-# HTCL 路线图
+# REIM 路线图
 
 > 基线：Minecraft Java Edition 26.3 / UE 5.8.4 / Windows x64 首发。  
 > 本文是 `ARCHITECTURE.md` §13 的展开，并作为**阶段顺序的权威说明**。路线以四个核心阶段为主线；文中 `P0-A`…`P0-F` 只是可行性实验编号，**不是阶段名**。  
@@ -168,7 +168,7 @@ M4 的 UI 骨架可在 M2 后启动，但产品验收必须同时具备 M2 与 M
 
 ### 4.4 可见成果
 
-- UE 5.8.4 工程与 `HTCLRuntime.exe`；
+- UE 5.8.4 工程与 `REIMRuntime.exe`；
 - UE 中显示真实区块、玩家与摄像机；
 - Converter 的覆盖范围与生成物清单（可重复产物）；
 - 临时 Renderer 与 UE Renderer 显示同一世界状态；
@@ -276,7 +276,7 @@ M4 的 UI 骨架可在 M2 后启动，但产品验收必须同时具备 M2 与 M
 
 ### 6.1 目标
 
-将 HTCL 从开发工具和原型整合成普通用户可以安装和使用的完整产品。
+将 REIM 从开发工具和原型整合成普通用户可以安装和使用的完整产品。
 
 **前置依赖**：M2 的 Shipping Runtime 与干净机验证；M3 的主要单机游戏能力。UI/安装框架可以提前开发，但产品验收必须等待两条线完成。
 
@@ -294,7 +294,7 @@ M4 的 UI 骨架可在 M2 后启动，但产品验收必须同时具备 M2 与 M
 
 ### 6.3 产品边界
 
-- HTCL **永远不能**启动原版 Java Minecraft；
+- REIM **永远不能**启动原版 Java Minecraft；
 - Launcher 是 Native Minecraft 的产品入口，不是 Java Edition 启动器；
 - 普通用户不应被要求安装 JDK、MSVC、CMake、Visual Studio 或 Unreal Engine；
 - 普通用户使用官方预编译 Native Runtime；
@@ -302,14 +302,14 @@ M4 的 UI 骨架可在 M2 后启动，但产品验收必须同时具备 M2 与 M
 
 ### 6.4 可见成果
 
-- 可安装的 HTCL Launcher 与更新通道；
+- 可安装的 REIM Launcher 与更新通道；
 - 版本/实例/Runtime 管理界面；
 - 启动、日志、崩溃报告与错误提示；
 - 干净用户机上的完整安装/启动/游玩/更新/卸载流程记录。
 
 ### 6.5 验收标准
 
-1. 普通用户可安装 HTCL，无需开发工具链；
+1. 普通用户可安装 REIM，无需开发工具链；
 2. 能检测/准备用户自有 Minecraft 文件，并安装 Native Runtime；
 3. 从 Launcher 启动 Native Minecraft 并正常游玩/退出；
 4. 更新、回滚、日志与崩溃诊断可用；

@@ -1,4 +1,4 @@
-# HTCL M1 执行计划 — C++ Native Gameplay Preview
+# REIM M1 执行计划 — C++ Native Gameplay Preview
 
 > 基线：Minecraft Java Edition 26.3 / Windows x64。  
 > 本文是 `ROADMAP.md` 第一阶段（M1）的执行级拆分，供新对话直接实施；与 `ROADMAP.md`、`ARCHITECTURE.md` 冲突时以两者为准。  
@@ -11,8 +11,8 @@
 **M1 的产物**
 
 - `mc_26.3.dll`：C++ Native Runtime，读取真实 26.3 存档、维护世界/玩家状态、固定 20 TPS，并通过版本化 C ABI 输出渲染快照与区块网格。
-- `HTCLPreview.exe`：临时 OpenGL Host，只负责窗口、输入、上传/绘制 Runtime 生成的网格。
-- `htcl-convert.exe` + `htcl-analyze.jar`：M1 阶段的 Converter 最小工具链（摄取/分析/数据提取/资源准备）。
+- `REIMPreview.exe`：临时 OpenGL Host，只负责窗口、输入、上传/绘制 Runtime 生成的网格。
+- `reim-convert.exe` + `reim-analyze.jar`：M1 阶段的 Converter 最小工具链（摄取/分析/数据提取/资源准备）。
 - 可重复的构建、运行、数据对照与验收记录。
 
 **M1 不做**
@@ -42,7 +42,7 @@
 
 ### 1.2 非目标
 
-- 不要求 UE 渲染；`HTCLPreview` 是开发期临时 Host。
+- 不要求 UE 渲染；`REIMPreview` 是开发期临时 Host。
 - 不要求方块交互、背包、合成、生物、战斗、世界生成、维度切换。
 - 不要求完整资源包/模型/动画/天气/UI。
 - 不要求写入存档；写回属于后续阶段。
@@ -68,7 +68,7 @@
 
 | 编号 | 决策 | 内容 |
 |---|---|---|
-| M1-D01 | 进程/边界 | `mc_26.3.dll` 导出 `htcl_get_api`；`HTCLPreview.exe` 作为 Host 加载 DLL；C ABI 只用于 Host ↔ Native DLL |
+| M1-D01 | 进程/边界 | `mc_26.3.dll` 导出 `reim_get_api`；`REIMPreview.exe` 作为 Host 加载 DLL；C ABI 只用于 Host ↔ Native DLL |
 | M1-D02 | 渲染职责 | Runtime 生成区块网格/快照；Preview 只上传、绘制、做视锥剔除与 HUD，不重建世界、不计算游戏逻辑 |
 | M1-D03 | 坐标系 | 右手系、Y 向上、1 单位 = 1 方块/米；+X 东、+Z 南；yaw 0 朝 +Z，pitch 正方向向下；单位/朝向写入 C ABI 头文件 |
 | M1-D04 | 线程 | Runtime 内部模拟线程固定 20 TPS；Host 渲染线程按显示器刷新率 `fetch_frame`；输入经队列在下一 tick 应用 |
@@ -86,9 +86,9 @@
 | 目标 | 类型 | 说明 |
 |---|---|---|
 | `mc_26.3.dll` | SHARED | C++20、`/MD`、无 UE、无 JVM；导出 C ABI |
-| `HTCLPreview.exe` | EXE | GLFW + OpenGL 3.3 Core；加载 DLL；开发期 Host |
-| `htcl-convert.exe` | EXE | Converter 编排/摄取/提取/检查 |
-| `htcl-analyze.jar` | JAR | JDK 25 + ASM；类/依赖分析；离线 |
+| `REIMPreview.exe` | EXE | GLFW + OpenGL 3.3 Core；加载 DLL；开发期 Host |
+| `reim-convert.exe` | EXE | Converter 编排/摄取/提取/检查 |
+| `reim-analyze.jar` | JAR | JDK 25 + ASM；类/依赖分析；离线 |
 | `m1-tests.exe` | EXE | Catch2 单元/集成测试（按需运行） |
 
 ---
@@ -121,13 +121,13 @@
 ## 4. 仓库布局（M1 子集）
 
 ```text
-HTCL/
+Minecraft Reimagined Launcher/
 ├─ CMakeLists.txt
 ├─ CMakePresets.json
 ├─ runtime/
 │  ├─ contract/                  # C ABI / 快照结构（纯 C 头文件）
-│  │  ├─ htcl_abi.h
-│  │  └─ htcl_render.h
+│  │  ├─ reim_abi.h
+│  │  └─ reim_render.h
 │  ├─ mc-native/                 # C++ Runtime（生成 mc_26.3.dll）
 │  │  ├─ core/                   # tick/world/player/chunk
 │  │  ├─ data/                   # 生成表加载、注册表/方块定义
@@ -135,14 +135,14 @@ HTCL/
 │  │  ├─ anvil/                  # region/level.dat
 │  │  ├─ mesh/                   # section 网格生成
 │  │  └─ input/                  # 输入队列
-│  └─ preview/                   # 临时 OpenGL Host（HTCLPreview.exe）
+│  └─ preview/                   # 临时 OpenGL Host（REIMPreview.exe）
 │     ├─ main.cpp
 │     ├─ gl_renderer.*
 │     ├─ shader.*
 │     └─ hud.*
 ├─ converter/
-│  ├─ orchestrator/              # htcl-convert.exe
-│  └─ java-analyzer/             # htcl-analyze.jar（JDK 25 + ASM）
+│  ├─ orchestrator/              # reim-convert.exe
+│  └─ java-analyzer/             # reim-analyze.jar（JDK 25 + ASM）
 ├─ generated/                    # 生成物（默认 gitignore，不提交）
 │  └─ 26.3/
 ├─ third_party/                  # 固定版本依赖/许可清单
@@ -155,9 +155,9 @@ HTCL/
 
 ```text
 build/m1/bin/mc_26.3.dll
-build/m1/bin/HTCLPreview.exe
-build/m1/bin/htcl-convert.exe
-build/m1/bin/htcl-analyze.jar
+build/m1/bin/REIMPreview.exe
+build/m1/bin/reim-convert.exe
+build/m1/bin/reim-analyze.jar
 ```
 
 ---
@@ -173,18 +173,18 @@ build/m1/bin/htcl-analyze.jar
 | A1 | 建立目录与顶层 CMake，C++20、MSVC、`/MD`；Runtime DLL 关闭异常 | `cmake --preset m1-debug` 配置成功 |
 | A2 | `CMakePresets.json`：`m1-debug`、`m1-release`，Visual Studio 17 2022 / x64 | Rider 与 CLI 都能配置 |
 | A3 | 固定第三方依赖：GLFW、glad、stb、nlohmann/json、spdlog、Catch2、zlib-ng | 空目标可编译链接 |
-| A4 | 建立空目标：`mc_26_3`（输出 `mc_26.3.dll`）、`HTCLPreview`、`htcl-convert`、`m1-tests` | 全部产出 |
+| A4 | 建立空目标：`mc_26_3`（输出 `mc_26.3.dll`）、`REIMPreview`、`reim-convert`、`m1-tests` | 全部产出 |
 | A5 | 日志与错误码骨架；Windows UTF-8/UTF-16 转换 | 失败有可读日志 |
 | A6 | `generated/`、`build/`、用户文件加入 `.gitignore` | 不误提交 |
 
-**验收**：`HTCLPreview.exe` 能开一个空窗口并正常退出；`mc_26.3.dll` 能被 `LoadLibrary` + `GetProcAddress("htcl_get_api")`。
+**验收**：`REIMPreview.exe` 能开一个空窗口并正常退出；`mc_26.3.dll` 能被 `LoadLibrary` + `GetProcAddress("reim_get_api")`。
 
 ### M1-B — Converter 摄取与分析
 
 | 任务 | 内容 | DoD |
 |---|---|---|
-| B1 | `htcl-convert prepare --minecraft-dir <dir> --version 26.3 --out work/26.3` | 解析 version JSON；校验 client.jar/libraries/assets 是否存在；输出输入清单 |
-| B2 | `htcl-analyze.jar`：类清单、方法数、规范化字节码 hash、外部依赖 | 输出 `analysis/classes.json`、`analysis/deps.json` |
+| B1 | `reim-convert prepare --minecraft-dir <dir> --version 26.3 --out work/26.3` | 解析 version JSON；校验 client.jar/libraries/assets 是否存在；输出输入清单 |
+| B2 | `reim-analyze.jar`：类清单、方法数、规范化字节码 hash、外部依赖 | 输出 `analysis/classes.json`、`analysis/deps.json` |
 | B3 | 代表性样本转换实验：选 1–2 个小组件（如 NBT/集合/字符处理）做 C++ 生成或手写对照 | 产出样本 + 差异记录 |
 | B4 | 数据提取：运行 26.3 数据生成器 `--reports`（若可用），或读取现有 reports | `generated/26.3/reports/` 含 blocks/registries 等 |
 | B5 | 生成 `blocks.json`：方块名/属性/是否完整方块/生命周期 | Runtime 可据此建立方块表 |
@@ -202,7 +202,7 @@ build/m1/bin/htcl-analyze.jar
 | C3 | Region `.mca`：8KB 头、chunk 偏移、zlib/gzip/无压缩、外部 chunk 处理策略 | 能枚举并解压区块 |
 | C4 | Chunk/section：`block_states` 调色板 + packed long、biomes（可最小） | 能按坐标读取方块状态 |
 | C5 | 世界数据模型：区块/区段/方块状态/光照（skylight/blocklight） | 内存中可查询/遍历 |
-| C6 | `htcl-convert inspect-world --world <path> --out report.json` | 输出区块数/方块样本/chunk 统计 |
+| C6 | `reim-convert inspect-world --world <path> --out report.json` | 输出区块数/方块样本/chunk 统计 |
 | C7 | Python oracle：独立 NBT/Anvil dump（zlib + struct） | 与 C++ 的方块样本逐点一致 |
 
 **验收**：对真实存档抽查坐标的方块名/属性与 oracle 完全一致；损坏区块跳过并记录，不崩溃。
@@ -211,7 +211,7 @@ build/m1/bin/htcl-analyze.jar
 
 | 任务 | 内容 | DoD |
 |---|---|---|
-| D1 | C ABI 头文件（M1 最小面）：create/destroy/start/stop/fetch_frame/submit_input/set_paused；与 E1 共同冻结 | `HTCLPreview` 能加载/校验版本 |
+| D1 | C ABI 头文件（M1 最小面）：create/destroy/start/stop/fetch_frame/submit_input/set_paused；与 E1 共同冻结 | `REIMPreview` 能加载/校验版本 |
 | D2 | 世界加载：出生点周围区块（半径可配置，默认 6） | 真实区块进入内存 |
 | D3 | 方块访问/碰撞 AABB（0.6×1.8，眼高 1.62）、重力、跳跃 | Headless 玩家可站立/下落 |
 | D4 | 固定 20 TPS 模拟线程、累加器、上限追帧 | tick 稳定；FPS 不影响 tick |
@@ -225,7 +225,7 @@ build/m1/bin/htcl-analyze.jar
 
 | 任务 | 内容 | DoD |
 |---|---|---|
-| E1 | 定义 `HtclRenderFrame`：frame/tick/partial_tick、Camera、Player、SectionMeshUpdate、SectionRemove、Environment | 与 `ARCHITECTURE.md` §8.2/§8.3 一致 |
+| E1 | 定义 `ReimRenderFrame`：frame/tick/partial_tick、Camera、Player、SectionMeshUpdate、SectionRemove、Environment | 与 `ARCHITECTURE.md` §8.2/§8.3 一致 |
 | E2 | Section 网格生成：16³、面剔除、邻区块边界、不透明/半透明分组 | 每个 section 输出顶点/索引/bounds/revision |
 | E3 | 顶点格式：position/normal/uv/light/sprite/tint | Preview 可直接上传 |
 | E4 | 纹理图集：从 client.jar 提取方块纹理，生成 `atlas.png` + `textures.json` | Runtime 能映射方块→sprite |
@@ -312,19 +312,19 @@ M1-A 工程启动
 ### 7.1 导出
 
 ```c
-#define HTCL_ABI_VERSION 1
-HTCL_EXPORT const HtclRuntimeApi* htcl_get_api(uint32_t abi_version);
+#define REIM_ABI_VERSION 1
+REIM_EXPORT const ReimRuntimeApi* reim_get_api(uint32_t abi_version);
 ```
 
-- `HtclRuntimeApi`：`create` / `destroy` / `start` / `stop` / `fetch_frame` / `submit_input` / `set_simulation_paused`。
-- `HtclHostApi`：至少 `alloc` / `free` / `log`；其他回调后续阶段再加。
+- `ReimRuntimeApi`：`create` / `destroy` / `start` / `stop` / `fetch_frame` / `submit_input` / `set_simulation_paused`。
+- `ReimHostApi`：至少 `alloc` / `free` / `log`；其他回调后续阶段再加。
 - 所有结构带 `struct_size`/`abi_version`；版本不匹配拒绝加载。
 - 不传 C++ 对象/STL；Runtime 内部字符串不跨界；日志用 UTF-8。
 
 ### 7.2 帧与快照
 
 ```text
-HtclRenderFrame
+ReimRenderFrame
   ├─ frame_id, tick, partial_tick
   ├─ CameraSnapshot        // pos/rot/fov/dimension
   ├─ PlayerSnapshot        // pos/vel/rot/flags
@@ -351,10 +351,10 @@ HtclRenderFrame
 ### 8.1 CLI（M1 目标接口）
 
 ```text
-htcl-convert prepare  --minecraft-dir <dir> --version 26.3 --out work/26.3
-htcl-convert analyze  --profile 26.3 --out work/26.3
-htcl-convert extract  --profile 26.3 --out generated/26.3
-htcl-convert inspect-world --world <path> --out report.json
+reim-convert prepare  --minecraft-dir <dir> --version 26.3 --out work/26.3
+reim-convert analyze  --profile 26.3 --out work/26.3
+reim-convert extract  --profile 26.3 --out generated/26.3
+reim-convert inspect-world --world <path> --out report.json
 ```
 
 ### 8.2 生成物
@@ -395,7 +395,7 @@ htcl-convert inspect-world --world <path> --out report.json
 ```bat
 cmake --preset m1-release
 cmake --build --preset m1-release
-build\m1\bin\HTCLPreview.exe --minecraft-dir <dir> --world <save> --generated generated\26.3
+build\m1\bin\REIMPreview.exe --minecraft-dir <dir> --world <save> --generated generated\26.3
 ```
 
 > 按用户规则，默认不主动运行完整验收/长时间 soak；由用户运行并反馈。
@@ -444,7 +444,7 @@ build\m1\bin\HTCLPreview.exe --minecraft-dir <dir> --world <save> --generated ge
 - 不先做 UE、Launcher UI、玩法系统；严格按 M1-A→H。
 - 不手改 `generated/`；不提交 Mojang 文件/世界/生成物。
 - C ABI 只用于 Host ↔ Native DLL；Preview 不反向控制世界。
-- 所有文件使用 Windows 绝对路径（如 `C:\Users\...\HTCL\...`）。
+- 所有文件使用 Windows 绝对路径（如 `C:\Users\...\REIM\...`）。
 - 每完成一个工作包按 DoD 自检；未过 G1 不进入 M2。
 
 **第一步**
@@ -517,4 +517,4 @@ build\m1\bin\HTCLPreview.exe --minecraft-dir <dir> --world <save> --generated ge
 | S3 | Runtime、20 TPS、C ABI、网格/快照 | 正式 UI、完整玩法、Converter 扩展 |
 | S4 | Preview、输入/相机/碰撞、验收/修复 | 新功能、Converter 扩展、UE |
 
-**交接原则**：接口（`htcl_abi.h`、坐标/单位、线程模型、生成物格式）在 S1/S3 冻结；后续会话只实现/修复，不重新设计。若必须改，先在本表记录原因，再改文档与代码。
+**交接原则**：接口（`reim_abi.h`、坐标/单位、线程模型、生成物格式）在 S1/S3 冻结；后续会话只实现/修复，不重新设计。若必须改，先在本表记录原因，再改文档与代码。
