@@ -9,9 +9,9 @@
 
 | | 开发/CI 环境 | 用户环境 |
 |---|---|---|
-| Unreal Engine | **需要 UE 5.8.4 + Editor/UBT** | **不需要** |
-| JDK | 需要 JDK 25（Converter 分析/准备） | **不需要**；HTCL 不启动 Java Edition |
-| MSVC/CMake | 需要 | 不需要 |
+| Unreal Engine | **M2 起**需要 UE 5.8.4 + Editor/UBT | **不需要** |
+| JDK | **M1 起**需要 JDK 25（Converter 分析/准备） | **不需要**；HTCL 不启动 Java Edition |
+| MSVC/CMake | **M1 起**需要 | 不需要 |
 | 产物 | Development/Shipping | **Shipping 发布包** |
 | 用途 | 编译/Cook/Package/调试/差分 | 只运行 |
 
@@ -72,22 +72,47 @@ HTCL/
 
 ## 3. 开发环境
 
-### 3.1 必需
+### 3.1 最小开发环境（按阶段）
 
-- Windows 10/11 x64；
-- **Visual Studio 2022 17.14+**（MSVC 14.50 推荐）、Windows SDK 10.0.26100；
-- **CMake 3.28+**；
-- **Unreal Engine 5.8.4**（Epic Launcher 安装，binary build）；
-- **JDK 25**（Temurin；分析/准备/原版 oracle）；
-- Git + Git LFS；
-- Python 3.12（脚本/差分/报告）。
+| 工具 | 版本 | 从哪个阶段开始必需 | 用途 |
+|---|---|---|---|
+| Windows | 10/11 x64 | 全部阶段 | 首发平台 |
+| Git | 最新 | M1 | 版本管理 |
+| CMake | 3.28+ | M1 | Runtime / Converter / 临时 Renderer 构建 |
+| MSVC + Windows SDK | MSVC 14.50、Windows SDK 10.0.26100 | M1 | C++ 编译。**只装 VS 2022 Build Tools，不装 Visual Studio IDE** |
+| JDK | 25（Temurin） | M1 | Converter 分析/数据生成/差分 oracle；仅离线使用 |
+| Python | 3.12 | M1 | 脚本/差分/报告 |
+| Unreal Engine | 5.8.4 | M2 | UE Host/Renderer、Cook/Package；M1 不需要 |
+| Qt | 6.8 LTS | M4 | Launcher UI；M1–M3 不需要 |
+| Git LFS | 最新 | M2（首次引入大文件时） | 二进制资产/大文件 |
+
+**最小起步（只做 M1）**
+
+- Windows 10/11 x64 + Git + CMake + **VS 2022 Build Tools**（MSVC + Windows SDK）+ JDK 25 + Python 3.12；
+- 另需用户自有的 Minecraft Java Edition **26.3 文件**与至少一个真实世界存档（见下）；
+- 不需要 Unreal Engine、Qt、Qt Creator 或完整 Visual Studio IDE。
+
+**M1 需要的游戏输入（不是开发工具）**
+
+- 用户自有 26.3 Java Edition 文件：version JSON、client.jar、libraries、assets，用于 Converter 摄取/分析、数据提取和资源读取；
+- 至少一个 26.3 世界存档（`.minecraft/saves/...` 或自行创建的测试世界），用于加载真实区块与地形；
+- 26.3 server jar：用于运行官方数据生成器 `--reports`（生成注册表/方块表），也用于原版差分 oracle；若你已有可用的 reports，则可不重复生成；
+- 准备方式：用官方启动器安装/更新到 26.3，或使用你已有的 26.3 文件；这些文件只作为输入/规格，**HTCL 不启动 Java Edition**，也不得提交到仓库或随产品分发。
+
+**关于 Rider / Visual Studio**
+
+- Rider 是 IDE，**不提供 MSVC 编译器、Windows SDK、CMake 或 UE**；
+- 完整 Visual Studio IDE 可以不装，但 **VS 2022 Build Tools 必须装**；Rider 检测并使用这套 MSVC 工具链；
+- 不要把“装 Rider”理解为“无需 MSVC”；完全不用微软工具链会与 UE/UBT 的 Windows 构建基线冲突；
+- Qt 通过 CMake 使用，不需要安装 Qt Creator。
 
 ### 3.2 可选
 
-- Rider（UE + CMake 工作流；Phase 0 验证）；
-- Unreal Insights；
-- RenderDoc/PIX（渲染调试）；
-- Tracy（可选，Core 性能）。
+- Rider（M1 起；替代 Visual Studio IDE，不替代 MSVC 工具链）；
+- Unreal Insights（M2 起）；
+- RenderDoc/PIX（M2 起，渲染调试）；
+- Tracy（M3 可选，Core 性能）；
+- Visual Studio IDE、Qt Creator：**不需要**。
 
 ### 3.3 用户环境（发布）
 

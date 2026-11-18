@@ -75,13 +75,16 @@ R3 UE 高级渲染增强（LOD/RT/PBR/更远视距）
 
 R0 **不是**原版 Java 渲染逻辑/OpenGL 绘制命令回放。
 
+> 开发期 M1 允许使用 GLFW/SDL3 + OpenGL 的临时 C++ Renderer 验证真实世界数据；它不属于渲染路线的 R0，不进入发布，且与 UE Renderer 共用同一 C++ Runtime 和 Rendering Contract。
+
 ## 文档索引
 
 | 文档 | 内容 |
 |---|---|
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 产品定位、Native Launcher 边界、UE 分发、总体架构、Native 化路线、Rendering Bridge、版本策略、风险、实测数据 |
 | [docs/TECH_STACK.md](docs/TECH_STACK.md) | Launcher/Converter/Native Runtime 技术选型、UE 打包/Shipping、依赖/许可证 |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | 阶段路线、版本更新列车、P0 go/no-go、依赖关系 |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | 四阶段路线（M1 C++ Gameplay Preview → UE Native Rendering → 完整游戏 + Converter → Launcher 产品化；Converter 自 M1 启动）、并行轨道、门禁、风险 |
+| [docs/M1_PLAN.md](docs/M1_PLAN.md) | M1 执行计划：工作包、C ABI/快照、Converter 产物、验收与新对话交接规则 |
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | 开发环境、仓库布局、构建边界、编码/ABI 规则、测试与发布 |
 | [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) | MC 版本/协议/存档/资源包/Mod/UE 运行环境兼容矩阵 |
 | [docs/ARCHITECTURE.md#附录-e26-3-静态实测2026-11-18](docs/ARCHITECTURE.md#附录-e26-3-静态实测2026-11-18) | 26.3 client.jar + 45 个库的静态普查数据 |
@@ -91,7 +94,7 @@ R0 **不是**原版 Java 渲染逻辑/OpenGL 绘制命令回放。
 - 本文档是**架构基线**，不是已实现产品。
 - 主版本基线：Minecraft Java Edition **26.3**（协议 777 / DataVersion 5023 / 资源包 97.1 / 数据包 121.0 / Java 25）。
 - UE 基线：**5.8.4**（开发/CI）；用户侧不安装。
-- 已对 26.3 做静态字节码普查（11,383 个类 + 45 个依赖库）；P0 仍需原型验证，详见 ARCHITECTURE 附录 E。
+- 已对 26.3 做静态字节码普查（11,383 个类 + 45 个依赖库）；当前首要目标是 M1（C++ Native Gameplay Preview），Converter 自 M1 启动并与 Runtime 共同演进；真实世界加载与运行原型仍待验证，详见 ROADMAP 与 ARCHITECTURE 附录 E。
 
 ## 法律与资产
 

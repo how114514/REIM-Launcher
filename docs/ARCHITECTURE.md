@@ -51,7 +51,7 @@ HTCL 是一个 **Minecraft Native Launcher**，同时包含一条 **Minecraft �
 | D-08 | Native 化方法 | **按子系统选择**：数据生成、差异/分析、选择性源码/字节码翻译、Native Adapter、手写原生、Patch、差分；不把“字节码→IR→C++”定为全局唯一方案 |
 | D-09 | Native 化范围 | 原版逻辑；不支持 Java Mod/Mixin/运行期字节码生成；封闭世界、固定入口 |
 | D-10 | 自动化边界 | “尽可能自动”不等于“完全自动”；不能用自动翻译硬碰渲染/平台/热路径/不可靠语义 |
-| D-11 | **渲染路线** | **R0 最小 Native Rendering 验证** → R1 区块+实体+基础环境 → R2 完整 Minecraft Renderer → R3 UE 高级增强。**R0 不是原版命令流/OpenGL 回放** |
+| D-11 | **渲染路线** | **R0 最小 Native Rendering 验证** → R1 区块+实体+基础环境 → R2 完整 Minecraft Renderer → R3 UE 高级增强。**R0 不是原版命令流/OpenGL 回放**。M1 允许开发期临时 C++ Renderer（GLFW/SDL3 + OpenGL）验证真实世界数据；它不是 R0、不进入发布，且与 UE Renderer 共用同一 Runtime/Rendering Contract |
 | D-12 | UE 职责 | UE 是 **Native Runtime 的宿主与渲染后端**，不是整个 HTCL 产品的宿主；不接管游戏规则、物理、AI、世界模拟、网络权威 |
 | D-13 | **线程模型** | 服务端模拟 **20 TPS**、客户端模拟 **20 TPS**，与渲染 FPS（60/120/144+）解耦；UE GT 按帧消费不可变快照；世界状态不绑定渲染帧率 |
 | D-14 | Bridge | 版本化 POD/句柄/池化缓冲；C++ Runtime → Rendering Contract → Bridge → UE Renderer；快照/双缓冲/Dirty/增量/对象池/Chunk Mesh Cache；世界数据只在变更时传输 |
@@ -200,7 +200,7 @@ HTCL 是一个 **Minecraft Native Launcher**，同时包含一条 **Minecraft �
 
 ## 2. 研究结论与关键事实
 
-> 本节只列会改变架构的事实。置信度标“待验证”的内容必须在 P0/P1 用实际 26.3 构建复核；不能当成已实现能力。
+> 本节只列会改变架构的事实。置信度标“待验证”的内容必须在 M1/M2 用实际 26.3 构建复核；不能当成已实现能力。
 
 ### 2.1 Minecraft 26.3 事实
 
@@ -281,11 +281,11 @@ HTCL 是一个 **Minecraft Native Launcher**，同时包含一条 **Minecraft �
 
 ### 2.6 对架构的直接结论
 
-1. **HTCL 的入口是 Launcher；唯一可启动目标是 Native Runtime**。Java Edition 是输入/规格，不是可启动游戏。
+1. **产品入口是 Launcher（M4 交付）；唯一可启动目标是 Native Runtime**。开发阶段允许使用 CLI/最小调试启动器，不作为产品。Java Edition 是输入/规格，不是可启动游戏。
 2. **Minecraft Native 化是产品核心技术，但不是“逐行语法替换”**：需要闭世界分析、选择性翻译/生成、Native Adapter、库替换、渲染/平台适配与 Patch 体系。
 3. **不能把整个 Minecraft 当作一个可无条件 AOT 的程序**：反射、动态类加载、JNI、Mixin、并发、渲染都是边界条件；必须显式定义支持子集与失败策略。
 4. **Unreal 只应接管宿主/渲染/平台，不应接管游戏规则**；否则会把“Native 化问题”变成“重写问题”。
-5. **渲染必须从最小 Native 渲染开始**：R0 只证明 C++ Runtime/Contract/Bridge/UE 能显示世界；随后 R1 区块+实体+基础环境、R2 完整 Minecraft Renderer、R3 UE 增强。**不做原版命令流/OpenGL 回放。**
+5. **渲染必须从最小 Native 渲染开始**：R0 只证明 C++ Runtime/Contract/Bridge/UE 能显示世界；随后 R1 区块+实体+基础环境、R2 完整 Minecraft Renderer、R3 UE 增强。**不做原版命令流/OpenGL 回放。** 在 UE 接管前，M1 允许临时 C++ Renderer（GLFW/SDL3 + OpenGL）只读 Runtime 快照做真实世界验证；它不是 R0，不进入发布，也不构成第二套游戏实现。
 6. **进程边界应按职责划分**：Launcher 不需要 UE/JVM；Converter 需要 JDK/工具链但不需要 UE；Native Runtime 需要 UE；游戏逻辑 DLL 不需要 UE。
 7. **版本迁移必须工具化**：差异分析、代码生成/翻译、Patch 重放、差分验证四件事缺一不可。
 8. **法律约束是架构约束**：Java Edition 输入必须用户自有；本地 Native 化与官方预编译 Native Runtime 都要法律评审；不随产品分发 Mojang 代码/资产。
@@ -1078,7 +1078,7 @@ Java 异常是控制流，必须保持语义：
 
 - **Codec/DynamicOps 的转换/重实现必须前置**，不能等到存档阶段；
 - 旧存档 DataFixer 是另一件事，默认走官方离线升级；
-- 需要在 P0/P1 专门验证 codec 的 lambda/record/泛型/`DataResult` 链在 Native 化后的正确性与性能。
+- 需要在 P0/M1–M3 专门验证 codec 的 lambda/record/泛型/`DataResult` 链在 Native 化后的正确性与性能。
 
 #### 5.4.8 GC 与内存
 
@@ -1458,7 +1458,7 @@ HTCL：   Vanilla 行为/数据/类分析 → 生成/选择性翻译/原生适�
 - 每 tick 临时分配用 arena；热路径避免字符串/容器分配。
 - 模拟线程优先级可配置；避免饿死 GT/音频；模拟 tick 与渲染 FPS 独立。
 - Bridge 上传限流；不阻塞逻辑线程。
-- 性能目标（初版，P1 校准）：20 TPS、60 FPS @1080p/渲染距离 8–12；tick p99 < 50 ms；GT Bridge < 2 ms/帧。
+- 性能目标（初版，M2 校准）：20 TPS、60 FPS @1080p/渲染距离 8–12；tick p99 < 50 ms；GT Bridge < 2 ms/帧。
 
 ### 6.7 调试与可观测性
 
@@ -1496,6 +1496,7 @@ Unreal Renderer
 4. Bridge 版本化；跨边界只用 C ABI/POD/句柄/池化缓冲；不传 C++ 对象/STL/UE 容器。
 5. **UE 不是游戏逻辑的主要依赖，也不是权威**；没有 UE 时，C++ Runtime 仍应能被 headless/差分测试驱动。
 6. R0/R1/R2/R3 只是“Native 渲染覆盖程度”的阶段，不改变依赖方向；**R0 不是原版渲染回放**。
+7. M1 的临时 C++ Renderer 是**开发期验证后端**，不属于 R0；它与 UE Renderer 消费同一 Runtime/Contract，不得复制游戏逻辑，不随产品发布。
 
 **迁移职责矩阵**
 
@@ -1920,18 +1921,18 @@ HtclRenderFrame
 |---|---|---|---|
 | **启动 Java Edition 26.3** | **否** | **否** | HTCL 是 Native Launcher，不提供 Java 启动 |
 | Java Edition 26.3 文件读取/准备 | 是 | — | 仅转换输入，不启动 |
-| Native Runtime 26.3 单机 | 是（分阶段） | — | P0/P1/P2 |
+| Native Runtime 26.3 单机 | 是（分阶段） | — | M1→M2/M3 纵向切片 |
 | 原版 26.3 存档读写 | 是 | — | Anvil/NBT/实体/POI |
 | 旧存档 | 官方离线升级 | 有限原生迁移 | 不做完整 DFU |
 | 原版资源包 26.3 | 是（模型/纹理/声音/语言/UI） | shader 覆盖后续 | shader 首版不支持 |
 | 原版数据包 26.3 | 分阶段 | 完整命令/世界生成 | 依赖 Codec/命令实现 |
-| 原版客户端连 HTCL 服务端 | P4 | — | 协议 777/离线优先 |
-| HTCL 客户端连原版服务端 | P4 拉伸 | — | MS 登录/聊天签名 |
+| 原版客户端连 HTCL 服务端 | 否 | 多人阶段 | 协议 777/离线优先 |
+| HTCL 客户端连原版服务端 | 否 | 多人阶段（拉伸） | MS 登录/聊天签名 |
 | Java Mod/Mixin | 否 | 否 | JVM/ASM |
 | OptiFine/Iris | 否 | 独立项目 | GLSL/管线 |
-| 原生 C ABI 扩展 | P5 | — | 内容/命令/事件 |
-| 专用服务器 | P4 可选 | — | headless |
-| 回放/录制 | P5 | — | 自有格式 |
+| 原生 C ABI 扩展 | 否 | 四阶段之后 | 内容/命令/事件 |
+| 专用服务器 | 否 | 可选（多人阶段） | headless |
+| 回放/录制 | 否 | 四阶段之后 | 自有格式 |
 
 ---
 
@@ -2090,71 +2091,60 @@ build/
 
 ## 13. 分阶段路线
 
-> 工程量级以多名有经验的编译器/引擎/游戏逻辑工程师为参考，不是日期承诺。**P0 的转换可行性门禁决定后续路线**；若自动化率远低于预期，必须调整范围/路线，而不是硬推。
+> 阶段顺序以 `ROADMAP.md` 为准；本节只做摘要。`P0-A`…`P0-F` 是可行性实验编号，不是阶段名。阶段完成只看验收/门禁，不是日期承诺。
 
 ### 13.1 阶段总览
 
 | 阶段 | 目标 | 主要成果 | 依赖 |
 |---|---|---|---|
-| P0 定位与可行性 | Launcher 检测/准备 Java Edition 输入 + Native Runtime 安装/启动；验证 Native 化/渲染/ABI/UE 分发四条技术线 | Launcher MVP；26.3 分析报告；样本翻译/生成；UE Shipping+R0 最小 Native 骨架；go/no-go | 无 |
-| P1 端到端切片 | Native 版加载世界、渲染、移动、保存 | DLL+Runtime 闭环；R0 最小 Native 渲染；单机纵向切片 | P0 |
-| P2 可玩核心 | 方块/背包/合成/基础生物/存档；R1 接管 | 单机可玩；差分 v1；性能基线 | P1 |
-| P3 兼容广度 | 世界生成/维度/命令/UI/音频/资源包 | P2/P3 目标；8h soak；资源矩阵 | P2 |
-| P4 多人 | 协议/服务端/客户端互操作 | 原版客户端连接；翻译层 | P2/P3 |
-| P5 生态/增强 | 原生扩展、R2/R3 渲染、回放、性能 | 扩展 API；增强 profile | P3/P4 |
-| P6 版本列车 | 26.4/27.x 迁移 | diff/重新生成/补丁/回归 | 全部 |
+| **M1 — C++ Native Gameplay Preview** | 用 C++ Runtime 加载真实 Minecraft 世界并显示 | 真实区块/地形、第一人称相机与移动；临时 C++ Renderer；无 JVM | 无 |
+| **M2 — UE Native Rendering** | 用 UE Renderer 替换临时渲染 | 同一 Runtime 经 UE 显示真实世界；R0；Shipping 干净机验证 | M1 |
+| **M3 — 完整游戏 + Converter** | 主要单机能力 + 在 M1/M2 基础上升级的可重复转换工具链 | 可玩单机 Native 游戏；分析/生成/转换/Patch/差分流水线 | M1；与 M2 并行 |
+| **M4 — Launcher UI 与产品化** | 普通用户可安装使用的产品 | 安装包、Launcher、实例/版本/Runtime 管理、启动与诊断 | M2 + M3 |
+
+**依赖关系**：M1 是共同基础；M2 与 M3 可并行；M4 的产品验收需要 M2 的 Shipping Runtime 与 M3 的游戏内容。Launcher 正式 UI 只在 M4 交付，之前允许开发用 CLI。
 
 ### 13.2 各阶段要点
 
-**P0 — 定位与可行性**
+**M1 — C++ Native Gameplay Preview**
 
-- Launcher：账号/版本信息/检测/准备用户自有 Java Edition 26.3 文件/Native 版本/实例/Runtime 安装与启动/日志。**不启动 Java Edition。**
-- Converter：摄取/分析 26.3；类清单/依赖/反射/库报告；对 1–2 个代表性子系统做“翻译/生成/原生”选型实验；JRT 最小骨架（仅翻译分支）；GC/异常 spike。
-- Runtime：UE Shipping 骨架；C ABI；20 TPS 模拟线程；R0 最小 Native 渲染（区块/玩家/摄像机，不做命令回放）；在**未安装 UE** 的干净机上跑通发布包。
-- 差分：原版 server oracle；最小 harness。
-- **go/no-go**：翻译/生成样本的编译/通过率；反射/DFU/Netty/线程可行性；R0 最小 Native 渲染可行性；UE Shipping 分发可行性。
-- 验收：Launcher 能检测/准备 Java Edition 输入、安装/启动 Native Runtime；样本 DLL 能在 UE Runtime 中显示 R0 内容；**无任何 Java Edition 启动路径**；报告明确“能自动/不能自动”。
+- C++ Runtime：世界状态、区块/区段、玩家、相机、基础碰撞、固定 20 TPS。
+- Converter：启动 Java Edition 文件摄取、版本/类依赖分析、数据提取、代表性样本转换与代码生成；建立与 Runtime 的协作接口。
+- 真实数据：用户自有 26.3 文件；解析 `level.dat`/Anvil/NBT；真实存档/区块；不伪造世界；Runtime 使用 Converter 真实产物而非长期手写假数据。
+- 临时 Renderer：GLFW/SDL3 + OpenGL；区块网格上传/绘制、纹理图集、调试 HUD；只读 Runtime 快照，网格由 Runtime 生成。
+- Contract 前置：快照/增量边界从第一天定义，供后续 UE Renderer 复用。
+- 验收：进入真实世界、第一人称移动/视角、无 JVM、10 分钟稳定；临时 Renderer 不改变世界状态。
 
-**P1 — 端到端切片**
+**M2 — UE Native Rendering**
 
-- Native 版加载 26.3 测试世界；R0 区块/玩家/摄像机；移动/相机/碰撞；保存只读/写入。
-- 资源导入/图集/基础纹理/字体；R0 最小 Native 渲染链路完整。
-- 差分：世界加载/渲染截图/基本输入。
-- 验收：Native 版进入世界并游玩 10 分钟；存档可被原版读取；R0 截图接近规格。
+- UE 5.8.4 Host、Rendering Bridge、R0 区块/玩家/摄像机；20 TPS 与渲染 FPS 解耦。
+- Converter：并行扩展转换覆盖、数据生成、Native Adapter、Runtime Support、Patch；持续用真实产物替换临时数据。
+- 同一 `mc_<version>.dll` 同时驱动临时 Renderer 与 UE Host；不形成两套游戏实现。
+- Shipping：UAT `BuildCookRun`、app-local VC++ 运行库、**未安装 UE** 的干净机验证。
+- 临时 Renderer 保留为调试/回归工具，是否进入正式版本由实际情况决定。
 
-**P2 — 可玩核心**
+**M3 — 完整游戏 + Converter**
 
-- 方块交互/背包/合成/熔炉/箱子/基础生物/战斗/光照/天气/保存。
-- R1 接管区块/基础实体/基础环境；UI 仅最小 HUD，完整 UI 到 R2。
-- 差分 v1；性能基线；8h 稳定性起步。
-- 验收：30 分钟脚本化场景；P2 通过率 ≥ 95%（场景公开）；R1 vs R0 截图评审。
+- 游戏线：方块交互、背包/物品/合成/熔炉/箱子、玩家属性、基础生物/战斗、世界生成/维度、UI/音频/资源包、存档读写。
+- Converter 线：在 M1/M2 基础上完善并规模化（不是从零开始）：分析/数据生成/选择性翻译/Native Adapter/Runtime Support/Patch/构建集成/差分/版本适配/错误诊断。
+- 两条线并行：不要求 Converter 先通用化；每个子系统先做到可用，再沉淀工具链；Converter 与 Runtime 共同演进，生成代码/数据结构/接口/版本信息一致；不做通用 Java→C++ 编译器。
+- 多人/Mod/生态默认不纳入本阶段。
 
-**P3 — 兼容广度**
+**M4 — Launcher UI 与产品化**
 
-- 世界生成/维度/结构/地物；命令/函数/战利品/进度；完整 UI/音频/资源包；OIT/透明。
-- 验收：固定种子区块/结构 golden；UI/音频评审；资源/数据包矩阵；8h soak。
-
-**P4 — 多人**
-
-- 26.3 服务端/客户端协议；登录/配置/play；原版客户端连接；聊天签名；专用服务器。
-- 验收：原版客户端 30 分钟多人会话；恶意包/限速测试；协议 golden。
-
-**P5 — 生态/增强**
-
-- 原生 C ABI 扩展；R2 渲染/增强 profile；回放/录制；性能优化；工具链自动化。
-
-**P6 — 版本列车**
-
-- 每个稳定版：摄取/diff/生成/补丁/验证/发布；UE 升级独立分支。
+- Qt 6.8 Launcher、实例/版本/Runtime 管理、用户文件检测/准备、下载/安装/更新、启动/进程/日志/崩溃、账号/配置、安装包/首次启动/错误提示。
+- 永不启动 Java Edition；普通用户不安装 JDK/MSVC/CMake/Visual Studio/UE。
+- 干净用户机完成安装/启动/游玩/更新/卸载验证。
 
 ### 13.3 并行轨道
 
-- **Track L（Launcher）**：版本/实例/账号/下载/启动/更新。
-- **Track C（Converter/JRT）**：分析/翻译/运行时/库替换/补丁。
-- **Track R（Runtime/Renderer）**：UE 宿主/ABI/R0/R1/资源/UI/音频。
-- **Track Q（QA）**：oracle/差分/截图/性能/CI。
-
-P0 后 L 可独立推进；C/R 以 ABI 契约并行；Q 从第一天介入。
+- **Track R（C++ Runtime）**：世界/模拟/玩家/存档/协议；M1 起，关键路径。
+- **Track T（临时 Renderer）**：M1；M2 后作调试/回归。
+- **Track U（UE Host/Renderer）**：M1 后期接口并行，M2 主攻，M3 继续 R1/R2。
+- **Track C（Converter/数据）**：M1 启动，M2 扩展，M3 完善/规模化；与 Runtime 共同演进。
+- **Track L（Launcher）**：M4 产品化；之前只做开发用 CLI/最小启动器。
+- **Track Q（QA）**：oracle/差分/截图/性能/干净机/CI，全程。
+- **Track V（版本迁移）**：M3 后常态；与 UE 升级分支独立。
 
 ---
 
@@ -2171,7 +2161,7 @@ P0 后 L 可独立推进；C/R 以 ABI 契约并行；Q 从第一天介入。
 | 法律/衍生作品/资产/UE 许可 | 极高 | 无法发布/下架/诉讼 | 用户自有输入；官方预编译 Native Runtime 法律评审；不分发 Mojang 代码/资产；UE 合规 |
 | Developer Mode 构建门槛（JDK/MSVC/CMake） | 中高 | 高级用户无法本地构建 | User Mode 用官方预编译 Native Runtime；Developer Mode 明确检测/文档；便携工具链（可选） |
 | 版本更新频繁 | 高 | 维护成本 | diff/生成/补丁/差分工具链；单 profile |
-| 世界生成/红石/AI 广度 | 高 | 长期无法全覆盖 | 纵向切片；P2/P3 分级；明确非目标 |
+| 世界生成/红石/AI 广度 | 高 | 长期无法全覆盖 | 纵向切片；M3 明确支持范围；明确非目标 |
 | 多线程语义/竞态 | 中高 | 崩溃/差分失败 | 保留线程边界；显式同步；压力测试 |
 | ABI/跨 DLL 分配/CRT | 中 | 崩溃/难调试 | 纯 C ABI；同侧分配；版本校验；PDB |
 | Launcher 安全/账号 | 中 | 令牌/注入/下载风险 | 白名单/校验/DPAPI/签名 |
@@ -2187,14 +2177,14 @@ P0 后 L 可独立推进；C/R 以 ABI 契约并行；Q 从第一天介入。
 4. **Runtime 分发**：UE Shipping 发布包如何分发（随 Launcher/独立更新通道）？UE 许可/体积/差分更新/备份策略。
 5. **Developer Mode 最低配置**：本地 Native 化是否要求 MSVC/CMake/JDK？是否提供便携工具链？（User Mode 不要求）
 6. **旧存档**：只支持 26.3 原生 + 官方离线升级，还是投入 DFU 子集？
-7. **世界生成目标**：P3 首发是否必须？还是 P2 + 官方生成导入？
+7. **世界生成目标**：M3 首发是否必须完整，还是基础世界生成 + 官方生成导入？
 8. **多人优先级**：首发是否要求原版客户端连接？
 9. **渲染目标**：R0/R1 的覆盖范围与首发门槛？R2/R3 是否产品卖点？
 10. **OIT**：26.3 Improved Transparency 是否首发 parity 必须？
 11. **Java Mod**：是否永久不支持，还是未来做 native mod 生态？
 12. **平台**：仅 Windows x64，还是 Linux/macOS（影响 UE/Launcher/构建矩阵）？
 13. **原生扩展模型**：C ABI 信任安装，还是沙箱/WASM？
-14. **团队/预算**：决定 P0–P3 范围与并行度。
+14. **团队/预算**：决定 M1–M4 范围与并行度。
 15. **遥测/崩溃上报**：隐私/合规。
 16. **UE 源码构建**：是否允许在引擎 bug 时切源码构建？
 
@@ -2206,9 +2196,9 @@ P0 后 L 可独立推进；C/R 以 ABI 契约并行；Q 从第一天介入。
 - Native 化以 26.3 为唯一 profile；先单机纵向切片；多人后置。
 - 渲染 R0 最小 Native → R1 → R2 → R3 增强；shaderpack 不做。
 - 旧存档官方离线升级；不做完整 DFU。
-- 世界生成 P2 先行，P3 分阶段。
-- Java Mod 不支持；原生扩展 P5。
-- 所有不确定项在 P0/P1 实测并更新本文件/ADR。
+- 世界生成在 M3 先做基础维度/区块流，确定性与广度按差分结果分阶段。
+- Java Mod 不支持；原生扩展列入四阶段之后。
+- 所有不确定项在 M1/M2 及后续阶段实测并更新本文件/ADR。
 
 ### 14.4 待验证的技术假设
 
@@ -2219,22 +2209,22 @@ P0 后 L 可独立推进；C/R 以 ABI 契约并行；Q 从第一天介入。
 | 26.3 游戏本体可通过“翻译/生成/手写”组合原生化 | 核心路线 | P0 | 收缩范围/增加原生适配/调整路线 |
 | 游戏本体反射/Unsafe/native 面足够小（实测：5 个反射类、0 Unsafe、0 native） | 核心路线 | P0 语义验证 | 若运行期仍触发反射/JNI，增加白名单/适配 |
 | JRT 兼容面可控制在 350 个 JDK 类的按需子集，且不演化成完整 JVM | 运行时正确性/债务 | P0-A | 改用原生重写/缩小翻译面/调整路线 |
-| 约 479 个被使用的库类可替换或转换（Guava 92/FastUtil 182/Netty 60/Gson 18…） | 工作量/兼容 | P0-B/P1 | 增加原生适配/缩小功能范围 |
+| 约 479 个被使用的库类可替换或转换（Guava 92/FastUtil 182/Netty 60/Gson 18…） | 工作量/兼容 | P0-B/M1 | 增加原生适配/缩小功能范围 |
 | DFU 484 类可翻译（实测 0 反射/0 Unsafe/1,504 indy） | 数据加载 | P0-B | 原生重写 Codec/DynamicOps 子集/缩小数据包范围 |
-| R0 最小 Native 渲染可覆盖首版区块/玩家/摄像机需求 | 首版可玩 | P0-E/P1 | 缩小渲染范围/更早 R1/调整网格方案 |
+| R0 最小 Native 渲染可覆盖首版区块/玩家/摄像机需求 | 首版可玩 | P0-E/M2 | 缩小渲染范围/更早 R1/调整网格方案 |
 | JRT 的异常模型（setjmp/挂起异常）可在无 C++ 异常下稳定工作 | 运行时正确性 | P0 | 改用返回码状态机/局部启用异常 |
-| GC（Boehm/自研）可满足 Minecraft 分配/停顿 | 性能/稳定性 | P0/P1 | 换 GC/分代/调优/限制场景 |
-| Codec/DynamicOps 可转换或重实现 | 数据加载 | P0/P1 | 原生重写子集/缩小数据包范围 |
-| GLFW/OpenAL/平台调用可被宿主 ABI 替换，且不依赖原版渲染 | 客户端启动 | P0/P1 | 增加 Native 平台适配/缩小首版范围 |
-| R0 最小 Native 渲染链路可稳定运行 | 首版可玩 | P0/P1 | 调整 Contract/Bridge/网格方案 |
-| R1 可由 UE 接管区块/实体/环境并保持保真 | 视觉/性能 | P1/P2 | 延长 R0/混合方案 |
-| OIT/透明可在 UE parity 模式匹配 | 视觉 | P2 | 限制选项/标注差异 |
-| C ABI + 20 TPS 模拟 + 快照/FPS 分离满足延迟/稳定 | 架构 | P0/P1 | 调整线程/队列/快照策略 |
+| GC（Boehm/自研）可满足 Minecraft 分配/停顿 | 性能/稳定性 | P0/M1 | 换 GC/分代/调优/限制场景 |
+| Codec/DynamicOps 可转换或重实现 | 数据加载 | P0/M1–M3 | 原生重写子集/缩小数据包范围 |
+| GLFW/OpenAL/平台调用可被宿主 ABI 替换，且不依赖原版渲染 | 客户端启动 | P0/M1 | 增加 Native 平台适配/缩小首版范围 |
+| R0 最小 Native 渲染链路可稳定运行 | 首版可玩 | P0-E/M2 | 调整 Contract/Bridge/网格方案 |
+| R1 可由 UE 接管区块/实体/环境并保持保真 | 视觉/性能 | M2/M3 | 延长 R0/混合方案 |
+| OIT/透明可在 UE parity 模式匹配 | 视觉 | M3 | 限制选项/标注差异 |
+| C ABI + 20 TPS 模拟 + 快照/FPS 分离满足延迟/稳定 | 架构 | P0-F/M2 | 调整线程/队列/快照策略 |
 | Developer Mode 本地构建 DLL 可行且可复现 | 高级用户路径 | P0 | 提供容器化/官方预编译方案；User Mode 不受影响 |
-| 26.3 世界目录/存档布局如实测 | Launcher/存档 | P1 | 按实际结构调整 |
-| 26.3 协议/聊天签名细节可复刻 | 多人 | P4 | 离线优先/缩小支持 |
-| UE 5.8.4 Shipping 能在无 UE 的干净机运行（VC++ 运行库/DX） | 用户路径 | P0 | app-local 预置/换图形后端/缩小硬件矩阵 |
-| UE 5.8.4 在目标硬件满足性能 | 性能 | P1/P2 | 降渲染距离/LOD/增强分离 |
+| 26.3 世界目录/存档布局如实测 | Launcher/存档 | M1 | 按实际结构调整 |
+| 26.3 协议/聊天签名细节可复刻 | 多人 | 四阶段之后 | 离线优先/缩小支持 |
+| UE 5.8.4 Shipping 能在无 UE 的干净机运行（VC++ 运行库/DX） | 用户路径 | P0-F/M2 | app-local 预置/换图形后端/缩小硬件矩阵 |
+| UE 5.8.4 在目标硬件满足性能 | 性能 | M2/M3 | 降渲染距离/LOD/增强分离 |
 
 ---
 
@@ -2362,7 +2352,7 @@ typedef struct HtclSectionMeshUpdate {
 
 ## 附录 C：参考资料
 
-> 访问/核对时间：2026-11。部分版本细节需在 P0/P1 用实际 26.3 构建复核。
+> 访问/核对时间：2026-11。部分版本细节需在 M1/M2 用实际 26.3 构建复核。
 
 **Minecraft / 版本 / 协议 / 存档**
 
@@ -2673,5 +2663,5 @@ typedef struct HtclSectionMeshUpdate {
 2. **常量池引用 ≠ 运行期覆盖**：未执行路径的引用也计入；实际运行覆盖可能更小。
 3. **只覆盖 26.3 client.jar + 45 个依赖 JAR**：未分析 LWJGL 平台实现、ICU 数据表、native 二进制；这些按“替换”处理。
 4. **自写解析器**：已对 11,383 个类 0 失败，但不是 JVM 验证器；`StackMapTable`/动态常量等细节未逐项校验。
-5. **未测性能/内存/GC/线程**：这些只能用 P0/P1 原型测。
+5. **未测性能/内存/GC/线程**：这些只能用 M1/M2 原型测。
 6. **单版本**：26.4 的类/库/协议可能变化；结论需用同一脚本重跑。
