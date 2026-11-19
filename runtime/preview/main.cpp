@@ -1,46 +1,79 @@
 /*
- * REIMPreview.exe, S1 skeleton.
+ * REIMPreview.exe, S4 host (M1-F + M1-G).
  *
- * M1-A deliverable: a GLFW + OpenGL 3.3 Core window that opens and exits
- * cleanly, plus a DLL ABI smoke path (LoadLibrary + GetProcAddress). This is
- * the development-only Host; it contains no world or renderer logic yet.
+ * Development-only OpenGL 3.3 host. It loads mc_26.3.dll through the C ABI,
+ * reads the Runtime's immutable render frames, uploads/draws the supplied
+ * section meshes and forwards input. It never reconstructs world state and
+ * never writes to the save.
  *
- * Optional automation flags:
- *   --frames N        close after N presented frames
- *   --seconds N       close after N seconds
- *   --hidden          do not show the window
- *   --check-dll PATH  load the DLL and validate reim_get_api without a window
- *   --screenshot PATH write the last framebuffer to a PNG (development aid)
+ * Unified M1 launch arguments (docs/M1_PLAN.md M1-H1):
+ *   --world PATH            absolute 26.3 save directory (required to run)
+ *   --generated DIR         generated/26.3 (default: repo-relative search)
+ *   --minecraft-dir PATH    recorded for diagnostics
+ *   --render-distance N     chunk radius, default 6
+ *
+ * Development / automation flags:
+ *   --dll PATH              mc_26.3.dll (default: beside this exe)
+ *   --sensitivity X         degrees per mouse pixel (default 0.15)
+ *   --invert-y              invert vertical mouse look
+ *   --frames N              exit after N presented frames
+ *   --seconds N             exit after N wall-clock seconds
+ *   --hidden                create an invisible window (automation)
+ *   --no-vsync              disable vsync
+ *   --screenshot PATH       write the last frame as PNG
+ *   --report PATH           write a JSON run summary
+ *   --check-dll PATH        validate LoadLibrary + reim_get_api only
+ *   --check-generated DIR   validate generated/26.3 through DLL create
+ *   --help, --version
  */
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
+#define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
 
+#include "gl_loader.h"
+#include "gl_renderer.h"
+#include "hud.h"
 #include "reim_abi.h"
+#include "render_math.h"
 #include "util/log.h"
 #include "util/png.h"
 
+#include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <format>
+#include <fstream>
 #include <string>
 #include <vector>
-
-#ifdef _WIN32
-#include <windows.h>
-#endif
 
 namespace {
 
 struct Options {
+  std::string world;
+  std::string generated;
+  std::string minecraft_dir;
+  std::string dll;
+  std::string screenshot;
+  std::string report;
+  std::string check_dll_path;
+  std::string check_generated_dir;
   int frames = 0;
   double seconds = 0.0;
+  uint32_t render_distance = 6;
+  float sensitivity = 0.15f;
+  bool invert_y = false;
   bool hidden = false;
-  std::string dll_path;
-  std::string check_dll_path;
-  std::string screenshot_path;
-  std::string generated_path;
+  bool vsync = true;
+  bool third_person = false;
+  bool show_aabb = false;
+  double auto_walk_seconds = 0.0;
   bool help = false;
   bool version = false;
 };
@@ -60,15 +93,27 @@ std::string exe_directory() {
 
 void print_usage() {
   std::printf(
-      "REIMPreview (S1 skeleton)\n"
-      "  --frames N         close after N frames\n"
-      "  --seconds N        close after N seconds\n"
-      "  --hidden           create an invisible window\n"
-      "  --dll PATH         DLL to ABI-check (default: mc_26.3.dll beside the exe)\n"
-      "  --check-dll PATH   check LoadLibrary + reim_get_api without opening a window\n"
+      "REIMPreview (M1-F/G, ABI %u)\n"
+      "  --world PATH           26.3 save directory (required)\n"
+      "  --generated DIR        generated/26.3 (default: auto-detect)\n"
+      "  --minecraft-dir PATH   recorded for diagnostics\n"
+      "  --render-distance N    chunk radius, default 6\n"
+      "  --dll PATH             mc_26.3.dll (default: beside this exe)\n"
+      "  --sensitivity X        degrees per mouse pixel, default 0.15\n"
+      "  --invert-y             invert vertical look\n"
+      "  --frames N             exit after N presented frames\n"
+      "  --seconds N            exit after N seconds\n"
+      "  --hidden               create an invisible window\n"
+      "  --no-vsync             disable vsync\n"
+      "  --third-person         start in the third-person debug view\n"
+      "  --show-aabb            draw the player AABB at start\n"
+      "  --auto-walk SECONDS    hold forward for N seconds once ready (diagnostics)\n"
+      "  --screenshot PATH      write the last frame as PNG\n"
+      "  --report PATH          write a JSON run summary\n"
+      "  --check-dll PATH       validate the DLL ABI without a window\n"
       "  --check-generated DIR  validate generated/26.3 through DLL create\n"
-      "  --screenshot PATH  save the last frame as PNG\n"
-      "  --help, --version\n");
+      "  --help, --version\n",
+      REIM_ABI_VERSION);
 }
 
 bool parse_options(int argc, char** argv, Options& options) {
@@ -83,6 +128,22 @@ bool parse_options(int argc, char** argv, Options& options) {
       options.help = true;
     } else if (arg == "--version") {
       options.version = true;
+    } else if (arg == "--world") {
+      if (!next(options.world)) return false;
+    } else if (arg == "--generated") {
+      if (!next(options.generated)) return false;
+    } else if (arg == "--minecraft-dir") {
+      if (!next(options.minecraft_dir)) return false;
+    } else if (arg == "--dll") {
+      if (!next(options.dll)) return false;
+    } else if (arg == "--screenshot") {
+      if (!next(options.screenshot)) return false;
+    } else if (arg == "--report") {
+      if (!next(options.report)) return false;
+    } else if (arg == "--check-dll") {
+      if (!next(options.check_dll_path)) return false;
+    } else if (arg == "--check-generated") {
+      if (!next(options.check_generated_dir)) return false;
     } else if (arg == "--frames") {
       std::string value;
       if (!next(value)) return false;
@@ -91,16 +152,29 @@ bool parse_options(int argc, char** argv, Options& options) {
       std::string value;
       if (!next(value)) return false;
       options.seconds = std::atof(value.c_str());
+    } else if (arg == "--render-distance") {
+      std::string value;
+      if (!next(value)) return false;
+      options.render_distance =
+          static_cast<uint32_t>((std::max)(1, std::atoi(value.c_str())));
+    } else if (arg == "--sensitivity") {
+      std::string value;
+      if (!next(value)) return false;
+      options.sensitivity = static_cast<float>(std::atof(value.c_str()));
+    } else if (arg == "--invert-y") {
+      options.invert_y = true;
     } else if (arg == "--hidden") {
       options.hidden = true;
-    } else if (arg == "--dll") {
-      if (!next(options.dll_path)) return false;
-    } else if (arg == "--check-dll") {
-      if (!next(options.check_dll_path)) return false;
-    } else if (arg == "--screenshot") {
-      if (!next(options.screenshot_path)) return false;
-    } else if (arg == "--check-generated") {
-      if (!next(options.generated_path)) return false;
+    } else if (arg == "--no-vsync") {
+      options.vsync = false;
+    } else if (arg == "--third-person") {
+      options.third_person = true;
+    } else if (arg == "--show-aabb") {
+      options.show_aabb = true;
+    } else if (arg == "--auto-walk") {
+      std::string value;
+      if (!next(value)) return false;
+      options.auto_walk_seconds = std::atof(value.c_str());
     } else {
       std::fprintf(stderr, "unknown argument: %s\n", arg.c_str());
       return false;
@@ -109,133 +183,53 @@ bool parse_options(int argc, char** argv, Options& options) {
   return true;
 }
 
-void console_log(reim::log::Level level, std::string_view category,
-                 std::string_view message) {
-  static const char* names[] = {"TRACE", "DEBUG", "INFO", "WARN", "ERROR"};
-  const int index = static_cast<int>(level);
-  std::fprintf(stdout, "[%s] %.*s: %.*s\n",
-               names[index < 0 ? 0 : (index > 4 ? 4 : index)],
-               static_cast<int>(category.size()), category.data(),
-               static_cast<int>(message.size()), message.data());
-  std::fflush(stdout);
+const char* result_name(int32_t result) {
+  switch (result) {
+    case REIM_OK: return "REIM_OK";
+    case REIM_ERR_INVALID_ARGUMENT: return "REIM_ERR_INVALID_ARGUMENT";
+    case REIM_ERR_ABI_MISMATCH: return "REIM_ERR_ABI_MISMATCH";
+    case REIM_ERR_NOT_FOUND: return "REIM_ERR_NOT_FOUND";
+    case REIM_ERR_IO: return "REIM_ERR_IO";
+    case REIM_ERR_PARSE: return "REIM_ERR_PARSE";
+    case REIM_ERR_VERSION_MISMATCH: return "REIM_ERR_VERSION_MISMATCH";
+    case REIM_ERR_NO_WORLD: return "REIM_ERR_NO_WORLD";
+    case REIM_ERR_NOT_STARTED: return "REIM_ERR_NOT_STARTED";
+    case REIM_ERR_ALREADY_STARTED: return "REIM_ERR_ALREADY_STARTED";
+    case REIM_ERR_INTERNAL: return "REIM_ERR_INTERNAL";
+    default: return "REIM_ERR_UNKNOWN";
+  }
 }
 
-#ifdef _WIN32
-int check_dll(const std::string& path) {
-  const std::wstring wide = std::filesystem::path(path).wstring();
-  HMODULE module = ::LoadLibraryW(wide.c_str());
-  if (!module) {
-    reim::log::error("preview",
-                     std::format("LoadLibraryW failed for {} (error {})", path,
-                                 ::GetLastError()));
-    return 3;
-  }
-  using GetApiFn = const ReimRuntimeApi*(REIM_CALL*)(uint32_t);
-  auto get_api = reinterpret_cast<GetApiFn>(
-      ::GetProcAddress(module, "reim_get_api"));
-  if (!get_api) {
-    reim::log::error("preview", "GetProcAddress(reim_get_api) failed");
-    ::FreeLibrary(module);
-    return 4;
-  }
-  const ReimRuntimeApi* api = get_api(REIM_ABI_VERSION);
-  if (!api) {
-    reim::log::error("preview", "reim_get_api rejected REIM_ABI_VERSION");
-    ::FreeLibrary(module);
-    return 5;
-  }
-  if (api->abi_version != REIM_ABI_VERSION ||
-      api->struct_size < sizeof(ReimRuntimeApi)) {
-    reim::log::error("preview", "DLL returned an incompatible API table");
-    ::FreeLibrary(module);
-    return 6;
-  }
-  reim::log::info("preview",
-                  std::format("DLL OK: {} (ABI {}, api struct {} bytes)", path,
-                              api->abi_version, api->struct_size));
-  ::FreeLibrary(module);
-  return 0;
+void host_log(int32_t level, const char* category, const char* message) {
+  reim::log::write(static_cast<reim::log::Level>(level), category ? category : "runtime",
+                   message ? message : "");
 }
-#else
-int check_dll(const std::string& path) {
-  reim::log::warn("preview", "DLL checks are implemented on Windows only: " + path);
-  return 0;
-}
-#endif
 
-#ifdef _WIN32
-void log_to_file(reim::log::Level level, std::string_view category,
-                 std::string_view message, std::FILE* file) {
-  static const char* names[] = {"TRACE", "DEBUG", "INFO", "WARN", "ERROR"};
-  const int index = static_cast<int>(level);
-  std::fprintf(file, "[%s] %.*s: %.*s\n",
-               names[index < 0 ? 0 : (index > 4 ? 4 : index)],
-               static_cast<int>(category.size()), category.data(),
-               static_cast<int>(message.size()), message.data());
-  std::fflush(file);
-}
-#endif
-
-#ifdef _WIN32
-int check_generated(const std::string& dll_path, const std::string& generated_path) {
-  const std::wstring wide_dll = std::filesystem::path(dll_path).wstring();
-  HMODULE module = ::LoadLibraryW(wide_dll.c_str());
-  if (!module) {
-    reim::log::error("preview", std::format("LoadLibraryW failed for {} (error {})",
-                                             dll_path, ::GetLastError()));
-    return 3;
-  }
-  using GetApiFn = const ReimRuntimeApi*(REIM_CALL*)(uint32_t);
-  auto get_api = reinterpret_cast<GetApiFn>(::GetProcAddress(module, "reim_get_api"));
-  if (!get_api) {
-    reim::log::error("preview", "GetProcAddress(reim_get_api) failed");
-    ::FreeLibrary(module);
-    return 4;
-  }
-  const ReimRuntimeApi* api = get_api(REIM_ABI_VERSION);
-  if (!api) {
-    reim::log::error("preview", "reim_get_api rejected REIM_ABI_VERSION");
-    ::FreeLibrary(module);
-    return 5;
-  }
-  const std::wstring generated = std::filesystem::path(generated_path).wstring();
-  const std::wstring empty;
-  ReimInstanceConfig config{};
-  config.struct_size = sizeof(config);
-  config.abi_version = REIM_ABI_VERSION;
-  config.world_path = empty.c_str();
-  config.generated_path = generated.c_str();
-  config.minecraft_dir = nullptr;
-  config.render_distance = 6;
-  config.mouse_sensitivity = 0.15f;
-  ReimHostApi host{};
-  host.struct_size = sizeof(host);
-  host.abi_version = REIM_ABI_VERSION;
-  host.log = [](int32_t level, const char* category, const char* message) {
-    console_log(static_cast<reim::log::Level>(level), category, message);
+std::string find_generated_dir(const Options& options) {
+  if (!options.generated.empty()) return options.generated;
+  const std::filesystem::path exe = exe_directory();
+  const std::filesystem::path candidates[] = {
+      std::filesystem::current_path() / "generated" / "26.3",
+      exe / "generated" / "26.3",
+      exe / ".." / ".." / ".." / "generated" / "26.3",
   };
-  int32_t error = 0;
-  ReimInstance* instance = api->create(&config, &host, &error);
-  if (instance) {
-    reim::log::info("preview", "DLL create returned an instance");
-    api->destroy(instance);
-    ::FreeLibrary(module);
-    return 0;
+  for (const auto& candidate : candidates) {
+    std::error_code ec;
+    if (std::filesystem::is_regular_file(candidate / "blocks.json", ec)) {
+      return candidate.lexically_normal().string();
+    }
   }
-  ::FreeLibrary(module);
-  if (error == REIM_ERR_INTERNAL) {
-    reim::log::info("preview",
-                    "generated manifest accepted; S1 DLL is an ABI/contract stub");
-    return 0;
-  }
-  reim::log::error("preview", std::format("generated manifest rejected (error {})", error));
-  return 6;
+  return {};
 }
-#else
-int check_generated(const std::string&, const std::string&) {
-  return 0;
+
+void rotate_log_if_needed(const std::filesystem::path& log_path) {
+  std::error_code ec;
+  const auto size = std::filesystem::file_size(log_path, ec);
+  if (ec || size < 8u * 1024u * 1024u) return;
+  const std::filesystem::path previous = log_path.string() + ".1";
+  std::filesystem::remove(previous, ec);
+  std::filesystem::rename(log_path, previous, ec);
 }
-#endif
 
 bool capture_png(const std::string& path, int width, int height) {
   if (width <= 0 || height <= 0) return false;
@@ -246,8 +240,7 @@ bool capture_png(const std::string& path, int width, int height) {
   const size_t stride = static_cast<size_t>(width) * 4;
   for (int y = 0; y < height; ++y) {
     std::memcpy(flipped.data() + static_cast<size_t>(y) * stride,
-                pixels.data() + static_cast<size_t>(height - 1 - y) * stride,
-                stride);
+                pixels.data() + static_cast<size_t>(height - 1 - y) * stride, stride);
   }
   std::string error;
   if (!reim::png::write_file(path, width, height, 4, flipped.data(), error)) {
@@ -256,6 +249,468 @@ bool capture_png(const std::string& path, int width, int height) {
   }
   reim::log::info("preview", "screenshot written: " + path);
   return true;
+}
+
+#ifdef _WIN32
+struct LoadedDll {
+  HMODULE module = nullptr;
+  const ReimRuntimeApi* api = nullptr;
+};
+
+bool open_dll(const std::string& path, LoadedDll& out) {
+  out.module = ::LoadLibraryW(std::filesystem::path(path).wstring().c_str());
+  if (!out.module) {
+    reim::log::error("preview", std::format("LoadLibraryW failed for {} (error {})",
+                                             path, ::GetLastError()));
+    return false;
+  }
+  using GetApiFn = const ReimRuntimeApi*(REIM_CALL*)(uint32_t);
+  auto get_api =
+      reinterpret_cast<GetApiFn>(::GetProcAddress(out.module, "reim_get_api"));
+  if (!get_api) {
+    reim::log::error("preview", "GetProcAddress(reim_get_api) failed");
+    ::FreeLibrary(out.module);
+    out.module = nullptr;
+    return false;
+  }
+  out.api = get_api(REIM_ABI_VERSION);
+  if (!out.api) {
+    reim::log::error("preview",
+                     std::format("reim_get_api rejected ABI {}", REIM_ABI_VERSION));
+    ::FreeLibrary(out.module);
+    out.module = nullptr;
+    return false;
+  }
+  if (out.api->abi_version != REIM_ABI_VERSION ||
+      out.api->struct_size < sizeof(ReimRuntimeApi)) {
+    reim::log::error("preview", "DLL returned an incompatible API table");
+    ::FreeLibrary(out.module);
+    out.module = nullptr;
+    out.api = nullptr;
+    return false;
+  }
+  reim::log::info("preview",
+                  std::format("DLL OK: {} (ABI {}, api struct {} bytes)", path,
+                              out.api->abi_version, out.api->struct_size));
+  return true;
+}
+#else
+struct LoadedDll {
+  void* module = nullptr;
+  const ReimRuntimeApi* api = nullptr;
+};
+bool open_dll(const std::string&, LoadedDll&) {
+  reim::log::error("preview", "DLL loading is implemented on Windows only");
+  return false;
+}
+#endif
+
+#ifdef _WIN32
+int check_dll(const std::string& path) {
+  LoadedDll dll;
+  if (!open_dll(path, dll)) return 3;
+  ::FreeLibrary(dll.module);
+  return 0;
+}
+#else
+int check_dll(const std::string&) { return 0; }
+#endif
+
+#ifdef _WIN32
+int check_generated(const std::string& dll_path, const std::string& generated_path) {
+  LoadedDll dll;
+  if (!open_dll(dll_path, dll)) return 3;
+
+  const std::wstring generated = std::filesystem::path(generated_path).wstring();
+  ReimInstanceConfig config{};
+  config.struct_size = sizeof(config);
+  config.abi_version = REIM_ABI_VERSION;
+  // The contract check validates generated data only; a null world makes the
+  // Runtime return REIM_ERR_NO_WORLD without a misleading "world not found".
+  config.world_path = nullptr;
+  config.generated_path = generated.c_str();
+  config.render_distance = 6;
+  config.mouse_sensitivity = 0.15f;
+  ReimHostApi host{};
+  host.struct_size = sizeof(host);
+  host.abi_version = REIM_ABI_VERSION;
+  host.log = &host_log;
+
+  int32_t error = 0;
+  ReimInstance* instance = dll.api->create(&config, &host, &error);
+  if (instance) {
+    reim::log::info("preview", "DLL create returned an instance");
+    dll.api->destroy(instance);
+    ::FreeLibrary(dll.module);
+    return 0;
+  }
+  ::FreeLibrary(dll.module);
+  if (error == REIM_ERR_NO_WORLD) {
+    reim::log::info("preview",
+                    "generated manifest accepted (world required for a full instance)");
+    return 0;
+  }
+  reim::log::error("preview",
+                   std::format("generated manifest rejected ({})", result_name(error)));
+  return 6;
+}
+#else
+int check_generated(const std::string&, const std::string&) { return 0; }
+#endif
+
+struct HostState {
+  const ReimRuntimeApi* api = nullptr;
+  ReimInstance* instance = nullptr;
+  bool captured = false;
+  bool first_cursor = true;
+  double last_cursor_x = 0.0;
+  double last_cursor_y = 0.0;
+  bool third_person = false;
+  bool debug_aabb = false;
+  bool paused = false;
+  bool show_hud = true;
+  double auto_walk_seconds = 0.0;
+  bool auto_walk_started = false;
+  bool auto_walk_finished = false;
+  std::chrono::steady_clock::time_point auto_walk_start;
+  ReimVec3 auto_walk_from{0.0f, 0.0f, 0.0f};
+  float auto_walk_distance = 0.0f;
+};
+
+void submit_key(const HostState& state, int key, int action) {
+  ReimInputEvent event{};
+  event.struct_size = sizeof(event);
+  event.type = REIM_INPUT_KEY;
+  event.key = key;
+  event.action = action;
+  state.api->submit_input(state.instance, &event);
+}
+
+int map_key(int key) {
+  switch (key) {
+    case GLFW_KEY_W: return REIM_KEY_W;
+    case GLFW_KEY_A: return REIM_KEY_A;
+    case GLFW_KEY_S: return REIM_KEY_S;
+    case GLFW_KEY_D: return REIM_KEY_D;
+    case GLFW_KEY_SPACE: return REIM_KEY_SPACE;
+    case GLFW_KEY_LEFT_SHIFT: return REIM_KEY_LEFT_SHIFT;
+    case GLFW_KEY_LEFT_CONTROL: return REIM_KEY_LEFT_CONTROL;
+    case GLFW_KEY_UP: return REIM_KEY_UP;
+    case GLFW_KEY_DOWN: return REIM_KEY_DOWN;
+    case GLFW_KEY_LEFT: return REIM_KEY_LEFT;
+    case GLFW_KEY_RIGHT: return REIM_KEY_RIGHT;
+    default: return REIM_KEY_UNKNOWN;
+  }
+}
+
+void release_mouse(GLFWwindow* window, HostState& state) {
+  if (!state.captured) return;
+  state.captured = false;
+  state.first_cursor = true;
+  glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+}
+
+void capture_mouse(GLFWwindow* window, HostState& state) {
+  if (state.captured) return;
+  state.captured = true;
+  state.first_cursor = true;
+  glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+}
+
+void key_callback(GLFWwindow* window, int key, int /*scancode*/, int action,
+                  int /*mods*/) {
+  auto* state = static_cast<HostState*>(glfwGetWindowUserPointer(window));
+  if (state == nullptr) return;
+
+  if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
+    if (state->captured) {
+      release_mouse(window, *state);
+    } else {
+      glfwSetWindowShouldClose(window, GLFW_TRUE);
+    }
+    return;
+  }
+  if (action == GLFW_PRESS) {
+    if (key == GLFW_KEY_F1) state->show_hud = !state->show_hud;
+    if (key == GLFW_KEY_F3) {
+      state->paused = !state->paused;
+      state->api->set_simulation_paused(state->instance,
+                                        state->paused ? uint8_t{1} : uint8_t{0});
+      reim::log::info("preview", state->paused ? "simulation paused" : "simulation resumed");
+    }
+    if (key == GLFW_KEY_F5) state->third_person = !state->third_person;
+    if (key == GLFW_KEY_F8) state->debug_aabb = !state->debug_aabb;
+  }
+
+  const int mapped = map_key(key);
+  if (mapped == REIM_KEY_UNKNOWN) return;
+  if (action != GLFW_PRESS && action != GLFW_RELEASE && action != GLFW_REPEAT) return;
+  ReimInputEvent event{};
+  event.struct_size = sizeof(event);
+  event.type = REIM_INPUT_KEY;
+  event.key = mapped;
+  event.action = action == GLFW_RELEASE ? REIM_ACTION_RELEASE
+                 : action == GLFW_REPEAT ? REIM_ACTION_REPEAT
+                                         : REIM_ACTION_PRESS;
+  state->api->submit_input(state->instance, &event);
+}
+
+void cursor_callback(GLFWwindow* window, double x, double y) {
+  auto* state = static_cast<HostState*>(glfwGetWindowUserPointer(window));
+  if (state == nullptr || !state->captured) return;
+  if (state->first_cursor) {
+    state->first_cursor = false;
+    state->last_cursor_x = x;
+    state->last_cursor_y = y;
+    return;
+  }
+  const float dx = static_cast<float>(x - state->last_cursor_x);
+  const float dy = static_cast<float>(y - state->last_cursor_y);
+  state->last_cursor_x = x;
+  state->last_cursor_y = y;
+  if (dx == 0.0f && dy == 0.0f) return;
+  ReimInputEvent event{};
+  event.struct_size = sizeof(event);
+  event.type = REIM_INPUT_MOUSE_MOTION;
+  event.dx = dx;
+  event.dy = dy;
+  state->api->submit_input(state->instance, &event);
+}
+
+void mouse_button_callback(GLFWwindow* window, int button, int action, int /*mods*/) {
+  auto* state = static_cast<HostState*>(glfwGetWindowUserPointer(window));
+  if (state == nullptr) return;
+  if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
+    capture_mouse(window, *state);
+  }
+  ReimInputEvent event{};
+  event.struct_size = sizeof(event);
+  event.type = REIM_INPUT_MOUSE_BUTTON;
+  event.key = button;
+  event.action = action == GLFW_PRESS ? REIM_ACTION_PRESS : REIM_ACTION_RELEASE;
+  state->api->submit_input(state->instance, &event);
+}
+
+void focus_callback(GLFWwindow* window, int focused) {
+  auto* state = static_cast<HostState*>(glfwGetWindowUserPointer(window));
+  if (state == nullptr) return;
+  if (focused == GLFW_FALSE) release_mouse(window, *state);
+}
+
+void error_callback(int code, const char* description) {
+  reim::log::error("glfw", std::format("error {}: {}", code,
+                                       description ? description : ""));
+}
+
+/* S1-compatible OpenGL smoke window: no world, no DLL, just a clear frame.
+ * Kept for tools\s1-smoke.ps1, which launches the host without a save. */
+int run_empty_window(const Options& options) {
+  glfwSetErrorCallback(&error_callback);
+  if (!glfwInit()) {
+    reim::log::error("preview", "glfwInit failed");
+    return 7;
+  }
+  glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+  glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+  glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+  glfwWindowHint(GLFW_VISIBLE, options.hidden ? GLFW_FALSE : GLFW_TRUE);
+  GLFWwindow* window =
+      glfwCreateWindow(1280, 720, "REIMPreview - OpenGL smoke", nullptr, nullptr);
+  if (!window) {
+    reim::log::error("preview", "glfwCreateWindow failed (OpenGL 3.3 Core unavailable)");
+    glfwTerminate();
+    return 7;
+  }
+  glfwMakeContextCurrent(window);
+  glfwSwapInterval(options.vsync ? 1 : 0);
+  std::string gl_error;
+  if (!load_gl_functions(gl_error)) {
+    reim::log::error("preview", gl_error);
+    glfwDestroyWindow(window);
+    glfwTerminate();
+    return 7;
+  }
+  reim::log::info("preview",
+                  std::format("OpenGL: {} | {}",
+                              reinterpret_cast<const char*>(glGetString(GL_VERSION)),
+                              reinterpret_cast<const char*>(glGetString(GL_RENDERER))));
+
+  const auto start = std::chrono::steady_clock::now();
+  int frames = 0;
+  while (!glfwWindowShouldClose(window)) {
+    glfwPollEvents();
+    int width = 0;
+    int height = 0;
+    glfwGetFramebufferSize(window, &width, &height);
+    glViewport(0, 0, width, height);
+    glClearColor(0.07f, 0.10f, 0.16f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glfwSwapBuffers(window);
+    ++frames;
+
+    bool stop = false;
+    if (options.frames > 0 && frames >= options.frames) stop = true;
+    if (options.seconds > 0.0) {
+      const double elapsed =
+          std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+      if (elapsed >= options.seconds) stop = true;
+    }
+    if (stop) break;
+  }
+
+  if (!options.screenshot.empty()) {
+    int width = 0;
+    int height = 0;
+    glfwGetFramebufferSize(window, &width, &height);
+    capture_png(options.screenshot, width, height);
+  }
+  reim::log::info("preview", std::format("empty-window smoke exiting after {} frames",
+                                          frames));
+  glfwDestroyWindow(window);
+  glfwTerminate();
+  return 0;
+}
+
+std::string json_escape(const std::string& text) {
+  std::string out;
+  out.reserve(text.size() + 8);
+  for (char c : text) {
+    if (c == '\\' || c == '"') {
+      out.push_back('\\');
+      out.push_back(c);
+    } else if (static_cast<unsigned char>(c) < 0x20) {
+      out.push_back(' ');
+    } else {
+      out.push_back(c);
+    }
+  }
+  return out;
+}
+
+void draw_hud(reim::preview::Hud& hud, const ReimRenderFrame& frame,
+              const HostState& state,
+              const reim::preview::RenderStats& render_stats, float fps, int width,
+              int height) {
+  const uint32_t white = 0xFFFFFFFF;
+  const uint32_t dim = 0xFFB8C4D0;
+  const uint32_t accent = 0xFF77E0A0;
+  const uint32_t warn = 0xFFFFCF66;
+  const float scale = 2.0f;
+  const float line_height = 18.0f;
+  const float panel_x = 12.0f;
+  float y = 14.0f;
+
+  hud.rect(8.0f, 8.0f, 920.0f, 8.0f * line_height + 12.0f, 0x99000000);
+
+  if (!frame.ready) {
+    hud.text(panel_x, y, 3.0f, warn, "LOADING WORLD");
+    y += 30.0f;
+    hud.text(panel_x, y, scale, white,
+             std::format("{} / {} CHUNKS  {}%", frame.loaded_chunks,
+                         frame.total_chunks, frame.loading_percent));
+    y += line_height;
+    hud.text(panel_x, y, scale, dim, "REAL 26.3 SAVE - RUNTIME LOADING ON ITS THREAD");
+    return;
+  }
+
+  const double frames_per_second = static_cast<double>(fps);
+  hud.text(panel_x, y, scale, accent,
+           std::format("FPS {:.1f}   TPS {:.1f}   FRAME {:.1f} MS", frames_per_second,
+                       frame.measured_tps, frame.measured_frame_ms));
+  y += line_height;
+  // loaded_chunks includes the streaming halo, so it can exceed the initial
+  // total; the initial total is still shown on the loading screen.
+  hud.text(panel_x, y, scale, white,
+           std::format("TICK {}   CHUNKS {}   LOAD {}%", frame.tick,
+                       frame.loaded_chunks, frame.loading_percent));
+  y += line_height;
+  hud.text(panel_x, y, scale, white,
+           std::format("POS {:.2f} {:.2f} {:.2f}   YAW {:.0f} PITCH {:.0f}",
+                       frame.player.position.x, frame.player.position.y,
+                       frame.player.position.z, frame.player.yaw,
+                       frame.player.pitch));
+  y += line_height;
+  hud.text(panel_x, y, scale, white,
+           std::format("SECTIONS {} MESHED   BLOCKS {}   {}",
+                       frame.mesh_sections, frame.block_count,
+                       (frame.player.flags & REIM_PLAYER_ON_GROUND) ? "GROUND" : "AIR"));
+  y += line_height;
+  hud.text(panel_x, y, scale, white,
+           std::format("DRAW {}   TRIS {}   CULLED {}   MESHES {}", render_stats.draw_calls,
+                       render_stats.triangles, render_stats.culled_sections,
+                       render_stats.meshes));
+  y += line_height;
+  hud.text(panel_x, y, scale, dim,
+           std::format("ATLAS {}X{}   {}   {}{}", render_stats.atlas_width,
+                       render_stats.atlas_height,
+                       state.third_person ? "THIRD PERSON" : "FIRST PERSON",
+                       state.debug_aabb ? "AABB " : "",
+                       state.paused ? "PAUSED" : ""));
+  y += line_height;
+  hud.text(panel_x, y, scale, dim,
+           "WASD MOVE  SPACE JUMP  SHIFT SNEAK  CTRL SPRINT  MOUSE/ARROWS LOOK");
+  y += line_height;
+  hud.text(panel_x, y, scale, dim,
+           "CLICK CAPTURE  ESC RELEASE/QUIT  F1 HUD  F3 PAUSE  F5 VIEW  F8 AABB");
+
+  if (!state.third_person) {
+    const float cx = static_cast<float>(width) * 0.5f;
+    const float cy = static_cast<float>(height) * 0.5f;
+    hud.rect(cx - 1.0f, cy - 7.0f, 2.0f, 14.0f, 0xD0FFFFFF);
+    hud.rect(cx - 7.0f, cy - 1.0f, 14.0f, 2.0f, 0xD0FFFFFF);
+  }
+}
+
+void write_report(const std::string& path, const ReimRenderFrame& frame,
+                  const reim::preview::RenderStats& render_stats, uint64_t frames,
+                  double elapsed_seconds, double average_fps, const std::string& screenshot,
+                  const std::string& exit_reason, float auto_walk_distance) {
+  if (path.empty()) return;
+  std::error_code ec;
+  const std::filesystem::path report_path(path);
+  if (report_path.has_parent_path()) {
+    std::filesystem::create_directories(report_path.parent_path(), ec);
+  }
+  std::ofstream out(report_path, std::ios::binary | std::ios::trunc);
+  if (!out) {
+    reim::log::error("preview", "cannot write report: " + path);
+    return;
+  }
+  out << "{\n";
+  out << "  \"stage\": \"S4-preview\",\n";
+  out << "  \"ready\": " << (frame.ready ? "true" : "false") << ",\n";
+  out << "  \"exit_reason\": \"" << exit_reason << "\",\n";
+  out << "  \"frames\": " << frames << ",\n";
+  out << "  \"elapsed_seconds\": " << elapsed_seconds << ",\n";
+  out << "  \"average_fps\": " << average_fps << ",\n";
+  out << "  \"tick\": " << frame.tick << ",\n";
+  out << "  \"measured_tps\": " << frame.measured_tps << ",\n";
+  out << "  \"loaded_chunks\": " << frame.loaded_chunks << ",\n";
+  out << "  \"total_chunks\": " << frame.total_chunks << ",\n";
+  out << "  \"loading_percent\": " << frame.loading_percent << ",\n";
+  out << "  \"loaded_sections\": " << frame.loaded_sections << ",\n";
+  out << "  \"mesh_sections\": " << frame.mesh_sections << ",\n";
+  out << "  \"block_count\": " << frame.block_count << ",\n";
+  out << "  \"draw_calls\": " << render_stats.draw_calls << ",\n";
+  out << "  \"triangles\": " << render_stats.triangles << ",\n";
+  out << "  \"meshes\": " << render_stats.meshes << ",\n";
+  out << "  \"culled_sections\": " << render_stats.culled_sections << ",\n";
+  out << "  \"atlas\": {\"width\": " << render_stats.atlas_width
+      << ", \"height\": " << render_stats.atlas_height << "},\n";
+  out << "  \"player\": {\"x\": " << frame.player.position.x
+      << ", \"y\": " << frame.player.position.y << ", \"z\": " << frame.player.position.z
+      << ", \"yaw\": " << frame.player.yaw << ", \"pitch\": " << frame.player.pitch
+      << ", \"flags\": " << frame.player.flags << "},\n";
+  out << "  \"third_person_distance\": " << frame.third_person_distance << ",\n";
+  out << "  \"auto_walk_distance\": " << auto_walk_distance << ",\n";
+  out << "  \"screenshot\": \"" << json_escape(screenshot) << "\"\n";
+  out << "}\n";
+  out.flush();
+  if (!out) {
+    reim::log::error("preview", "report write failed: " + path);
+    return;
+  }
+  reim::log::info("preview", "report written: " + path);
 }
 
 } // namespace
@@ -271,8 +726,13 @@ int main(int argc, char** argv) {
     return 0;
   }
   if (options.version) {
-    std::printf("REIMPreview S1 (ABI %u)\n", REIM_ABI_VERSION);
+    std::printf("REIMPreview S4 (ABI %u)\n", REIM_ABI_VERSION);
     return 0;
+  }
+
+  std::string dll_path = options.dll;
+  if (dll_path.empty()) {
+    dll_path = (std::filesystem::path(exe_directory()) / "mc_26.3.dll").string();
   }
 
 #ifdef _WIN32
@@ -283,96 +743,411 @@ int main(int argc, char** argv) {
     std::filesystem::create_directories(logs, ec);
     if (!ec) {
       const std::filesystem::path log_path = logs / "preview.log";
+      rotate_log_if_needed(log_path);
       log_file = _wfopen(log_path.wstring().c_str(), L"a");
     }
   }
   reim::log::set_sink([log_file](reim::log::Level level, std::string_view category,
                                  std::string_view message) {
-    console_log(level, category, message);
-    if (log_file) log_to_file(level, category, message, log_file);
+    static const char* names[] = {"TRACE", "DEBUG", "INFO", "WARN", "ERROR"};
+    const int index = std::clamp(static_cast<int>(level), 0, 4);
+    std::printf("[%s] %.*s: %.*s\n", names[index], static_cast<int>(category.size()),
+                category.data(), static_cast<int>(message.size()), message.data());
+    std::fflush(stdout);
+    if (log_file) {
+      std::fprintf(log_file, "[%s] %.*s: %.*s\n", names[index],
+                   static_cast<int>(category.size()), category.data(),
+                   static_cast<int>(message.size()), message.data());
+      std::fflush(log_file);
+    }
   });
 #endif
 
-  reim::log::info("preview", std::format("REIMPreview S1 starting (ABI {})",
-                                         REIM_ABI_VERSION));
+  reim::log::info("preview", std::format("REIMPreview S4 starting (ABI {})",
+                                          REIM_ABI_VERSION));
 
-  std::string dll_path = options.check_dll_path;
-  if (dll_path.empty() && !options.dll_path.empty()) dll_path = options.dll_path;
-  if (options.check_dll_path.empty()) {
-    if (dll_path.empty()) {
-      const std::u8string value =
-          (std::filesystem::path(exe_directory()) / "mc_26.3.dll").u8string();
-      dll_path.assign(reinterpret_cast<const char*>(value.data()), value.size());
-    }
-    if (std::filesystem::exists(dll_path)) {
-      check_dll(dll_path);
-    } else {
-      reim::log::warn("preview", "DLL not found next to the host: " + dll_path);
-    }
-  } else {
-    const int result = check_dll(dll_path);
+  if (!options.check_dll_path.empty()) {
+    const int result = check_dll(options.check_dll_path);
+#ifdef _WIN32
     if (log_file) std::fclose(log_file);
+#endif
+    return result;
+  }
+  if (!options.check_generated_dir.empty()) {
+    const int result = check_generated(dll_path, options.check_generated_dir);
+#ifdef _WIN32
+    if (log_file) std::fclose(log_file);
+#endif
     return result;
   }
 
-  if (!options.generated_path.empty()) {
-    const int result = check_generated(dll_path, options.generated_path);
+  if (options.world.empty()) {
+    // No save given: keep the S1 OpenGL smoke path (no DLL, no world). If the
+    // caller supplied runtime paths, treat the missing --world as an error.
+    if (!options.generated.empty() || !options.minecraft_dir.empty()) {
+      reim::log::error("preview", "--world is required when --generated/--minecraft-dir is set");
+      print_usage();
+#ifdef _WIN32
+      if (log_file) std::fclose(log_file);
+#endif
+      return 2;
+    }
+    const int result = run_empty_window(options);
+#ifdef _WIN32
     if (log_file) std::fclose(log_file);
+#endif
     return result;
   }
+  std::error_code ec;
+  if (!std::filesystem::is_directory(options.world, ec) ||
+      !std::filesystem::is_regular_file(std::filesystem::path(options.world) / "level.dat",
+                                        ec)) {
+    reim::log::error("preview", "world not found (level.dat missing): " + options.world);
+#ifdef _WIN32
+    if (log_file) std::fclose(log_file);
+#endif
+    return 2;
+  }
+  const std::string generated = find_generated_dir(options);
+  if (generated.empty() ||
+      !std::filesystem::is_regular_file(std::filesystem::path(generated) / "blocks.json",
+                                        ec)) {
+    reim::log::error("preview",
+                     "generated data not found (blocks.json); pass --generated DIR");
+#ifdef _WIN32
+    if (log_file) std::fclose(log_file);
+#endif
+    return 2;
+  }
 
+  LoadedDll dll;
+  if (!open_dll(dll_path, dll)) {
+#ifdef _WIN32
+    if (log_file) std::fclose(log_file);
+#endif
+    return 3;
+  }
+
+  glfwSetErrorCallback(&error_callback);
   if (!glfwInit()) {
     reim::log::error("preview", "glfwInit failed");
+#ifdef _WIN32
+    ::FreeLibrary(dll.module);
     if (log_file) std::fclose(log_file);
-    return 2;
+#endif
+    return 7;
   }
   glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
   glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
   glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
   glfwWindowHint(GLFW_VISIBLE, options.hidden ? GLFW_FALSE : GLFW_TRUE);
 
-  GLFWwindow* window = glfwCreateWindow(1280, 720, "REIMPreview - S1 skeleton",
-                                        nullptr, nullptr);
+  GLFWwindow* window =
+      glfwCreateWindow(1280, 720, "REIMPreview - 26.3", nullptr, nullptr);
   if (!window) {
-    reim::log::error("preview", "glfwCreateWindow failed (OpenGL 3.3 Core unavailable)");
+    reim::log::error("preview",
+                     "glfwCreateWindow failed (OpenGL 3.3 Core unavailable)");
     glfwTerminate();
+#ifdef _WIN32
+    ::FreeLibrary(dll.module);
     if (log_file) std::fclose(log_file);
-    return 2;
+#endif
+    return 7;
   }
   glfwMakeContextCurrent(window);
-  glfwSwapInterval(1);
+  glfwSwapInterval(options.vsync ? 1 : 0);
 
+  std::string gl_error;
+  if (!load_gl_functions(gl_error)) {
+    reim::log::error("preview", gl_error);
+    glfwDestroyWindow(window);
+    glfwTerminate();
+#ifdef _WIN32
+    ::FreeLibrary(dll.module);
+    if (log_file) std::fclose(log_file);
+#endif
+    return 7;
+  }
   reim::log::info("preview",
-                  std::format("OpenGL: {}", reinterpret_cast<const char*>(glGetString(GL_VERSION))));
+                  std::format("OpenGL: {} | {}",
+                              reinterpret_cast<const char*>(glGetString(GL_VERSION)),
+                              reinterpret_cast<const char*>(glGetString(GL_RENDERER))));
 
-  const auto start = std::chrono::steady_clock::now();
-  int frame = 0;
+  reim::preview::Renderer renderer;
+  std::string render_error;
+  if (!renderer.initialize(generated, render_error)) {
+    reim::log::error("preview", render_error);
+    glfwDestroyWindow(window);
+    glfwTerminate();
+#ifdef _WIN32
+    ::FreeLibrary(dll.module);
+    if (log_file) std::fclose(log_file);
+#endif
+    return 7;
+  }
+  reim::preview::Hud hud;
+  std::string hud_error;
+  if (!hud.initialize(hud_error)) {
+    reim::log::error("preview", hud_error);
+    renderer.shutdown();
+    glfwDestroyWindow(window);
+    glfwTerminate();
+#ifdef _WIN32
+    ::FreeLibrary(dll.module);
+    if (log_file) std::fclose(log_file);
+#endif
+    return 7;
+  }
+
+  const std::wstring world_path = std::filesystem::path(options.world).wstring();
+  const std::wstring generated_path = std::filesystem::path(generated).wstring();
+  std::wstring minecraft_path;
+  if (!options.minecraft_dir.empty()) {
+    minecraft_path = std::filesystem::path(options.minecraft_dir).wstring();
+  }
+
+  ReimHostApi host{};
+  host.struct_size = sizeof(host);
+  host.abi_version = REIM_ABI_VERSION;
+  host.log = &host_log;
+
+  ReimInstanceConfig config{};
+  config.struct_size = sizeof(config);
+  config.abi_version = REIM_ABI_VERSION;
+  config.world_path = world_path.c_str();
+  config.generated_path = generated_path.c_str();
+  config.minecraft_dir = minecraft_path.empty() ? nullptr : minecraft_path.c_str();
+  config.render_distance = options.render_distance;
+  config.flags = 0;
+  config.mouse_sensitivity = options.sensitivity;
+  config.invert_y = options.invert_y ? 1u : 0u;
+
+  int32_t create_error = 0;
+  ReimInstance* instance = dll.api->create(&config, &host, &create_error);
+  if (!instance) {
+    reim::log::error("preview", std::format("create failed: {} ({})",
+                                             result_name(create_error), create_error));
+    hud.shutdown();
+    renderer.shutdown();
+    glfwDestroyWindow(window);
+    glfwTerminate();
+#ifdef _WIN32
+    ::FreeLibrary(dll.module);
+    if (log_file) std::fclose(log_file);
+#endif
+    return 5;
+  }
+  const int32_t start_result = dll.api->start(instance);
+  if (start_result != REIM_OK) {
+    reim::log::error("preview", std::format("start failed: {} ({})",
+                                             result_name(start_result), start_result));
+    dll.api->destroy(instance);
+    hud.shutdown();
+    renderer.shutdown();
+    glfwDestroyWindow(window);
+    glfwTerminate();
+#ifdef _WIN32
+    ::FreeLibrary(dll.module);
+    if (log_file) std::fclose(log_file);
+#endif
+    return 5;
+  }
+
+  HostState state;
+  state.api = dll.api;
+  state.instance = instance;
+  state.third_person = options.third_person;
+  state.debug_aabb = options.show_aabb;
+  state.auto_walk_seconds = options.auto_walk_seconds;
+  glfwSetWindowUserPointer(window, &state);
+  glfwSetKeyCallback(window, &key_callback);
+  glfwSetCursorPosCallback(window, &cursor_callback);
+  glfwSetMouseButtonCallback(window, &mouse_button_callback);
+  glfwSetWindowFocusCallback(window, &focus_callback);
+
+  glEnable(GL_DEPTH_TEST);
+  int fb_width = 0;
+  int fb_height = 0;
+  glfwGetFramebufferSize(window, &fb_width, &fb_height);
+
+  const auto start_time = std::chrono::steady_clock::now();
+  auto fps_window_start = start_time;
+  uint64_t fps_window_frames = 0;
+  double fps = 0.0;
+  auto next_title_update = start_time;
+  auto next_stats_log = start_time + std::chrono::seconds(5);
+  auto next_stats_frame = start_time + std::chrono::milliseconds(500);
+  uint64_t frames = 0;
+  bool ready_logged = false;
+  bool screenshot_written = false;
+  std::string exit_reason = "window_closed";
+  ReimRenderFrame last_frame{};
+  last_frame.struct_size = sizeof(last_frame);
+
   while (!glfwWindowShouldClose(window)) {
-    glClearColor(0.07f, 0.10f, 0.16f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    glfwSwapBuffers(window);
     glfwPollEvents();
-    ++frame;
+    glfwGetFramebufferSize(window, &fb_width, &fb_height);
 
-    if (options.frames > 0 && frame >= options.frames) break;
-    if (options.seconds > 0.0) {
-      const double elapsed = std::chrono::duration<double>(
-                                 std::chrono::steady_clock::now() - start)
-                                 .count();
-      if (elapsed >= options.seconds) break;
+    ReimRenderFrame frame{};
+    frame.struct_size = sizeof(frame);
+    frame.abi_version = REIM_ABI_VERSION;
+    const int32_t result = dll.api->fetch_frame(instance, &frame);
+    if (result != REIM_OK) {
+      reim::log::error("preview", std::format("fetch_frame failed: {} ({})",
+                                               result_name(result), result));
+      exit_reason = "fetch_frame_failed";
+      break;
     }
+    last_frame = frame;
+    renderer.apply_frame(frame);
+
+    reim::preview::RenderOptions render_options;
+    render_options.third_person = state.third_person;
+    render_options.debug_player_aabb = state.debug_aabb;
+    renderer.render(frame, render_options, fb_width, fb_height);
+
+    const auto now = std::chrono::steady_clock::now();
+    const double elapsed =
+        std::chrono::duration<double>(now - start_time).count();
+    ++frames;
+    ++fps_window_frames;
+    const double fps_elapsed =
+        std::chrono::duration<double>(now - fps_window_start).count();
+    if (fps_elapsed >= 0.5) {
+      fps = static_cast<double>(fps_window_frames) / fps_elapsed;
+      fps_window_frames = 0;
+      fps_window_start = now;
+    }
+
+    if (state.show_hud) {
+      hud.begin(fb_width, fb_height);
+      draw_hud(hud, frame, state, renderer.stats(), static_cast<float>(fps), fb_width,
+               fb_height);
+      hud.end();
+    }
+
+    if (frame.ready && !ready_logged) {
+      ready_logged = true;
+      reim::log::info("preview",
+                      std::format("world ready: {} chunks, {} meshed sections, spawn "
+                                  "({:.2f},{:.2f},{:.2f})",
+                                  frame.loaded_chunks, frame.mesh_sections,
+                                  frame.player.position.x, frame.player.position.y,
+                                  frame.player.position.z));
+    }
+
+    // Optional automation: prove the Host -> ABI input path moves the player.
+    if (state.auto_walk_seconds > 0.0 && frame.ready) {
+      if (!state.auto_walk_started) {
+        state.auto_walk_started = true;
+        state.auto_walk_start = now;
+        state.auto_walk_from = frame.player.position;
+        submit_key(state, REIM_KEY_W, REIM_ACTION_PRESS);
+        reim::log::info("preview",
+                        std::format("auto-walk: holding W from ({:.2f},{:.2f},{:.2f})",
+                                    state.auto_walk_from.x, state.auto_walk_from.y,
+                                    state.auto_walk_from.z));
+      } else if (!state.auto_walk_finished) {
+        const float dx = frame.player.position.x - state.auto_walk_from.x;
+        const float dz = frame.player.position.z - state.auto_walk_from.z;
+        state.auto_walk_distance = std::sqrt(dx * dx + dz * dz);
+        const double walked =
+            std::chrono::duration<double>(now - state.auto_walk_start).count();
+        if (walked >= state.auto_walk_seconds) {
+          state.auto_walk_finished = true;
+          submit_key(state, REIM_KEY_W, REIM_ACTION_RELEASE);
+          reim::log::info(
+              "preview",
+              std::format("auto-walk complete: {:.2f} blocks horizontally in {:.2f}s",
+                          state.auto_walk_distance, walked));
+        }
+      }
+    }
+
+    if (now >= next_stats_log) {
+      next_stats_log = now + std::chrono::seconds(5);
+      reim::log::info(
+          "stats",
+          std::format("fps={:.1f} tps={:.1f} tick={} pos=({:.2f},{:.2f},{:.2f}) "
+                      "chunks={} sections={} draws={} tris={} {}",
+                      fps, frame.measured_tps, frame.tick, frame.player.position.x,
+                      frame.player.position.y, frame.player.position.z,
+                      frame.loaded_chunks, frame.mesh_sections,
+                      renderer.stats().draw_calls, renderer.stats().triangles,
+                      state.paused ? "paused" : "running"));
+    }
+    if (now >= next_stats_frame || now >= next_title_update) {
+      next_stats_frame = now + std::chrono::milliseconds(500);
+      next_title_update = now + std::chrono::milliseconds(500);
+      if (!options.hidden) {
+        glfwSetWindowTitle(
+            window,
+            std::format("REIMPreview - 26.3 | {:.0f} FPS | {:.1f} TPS | tick {} | {}",
+                        fps, frame.measured_tps, frame.tick,
+                        frame.ready ? "ready" : "loading")
+                .c_str());
+      }
+    }
+
+    bool last = false;
+    if (options.frames > 0 && frames >= static_cast<uint64_t>(options.frames)) {
+      last = true;
+      exit_reason = "frame_limit";
+    }
+    if (options.seconds > 0.0 && elapsed >= options.seconds) {
+      last = true;
+      exit_reason = "time_limit";
+    }
+    if (glfwWindowShouldClose(window)) {
+      last = true;
+      exit_reason = "window_closed";
+    }
+
+    if (last && !options.screenshot.empty() && !screenshot_written) {
+      screenshot_written = capture_png(options.screenshot, fb_width, fb_height);
+    }
+    glfwSwapBuffers(window);
+    if (last) break;
   }
 
-  int width = 0;
-  int height = 0;
-  glfwGetFramebufferSize(window, &width, &height);
-  if (!options.screenshot_path.empty()) {
-    capture_png(options.screenshot_path, width, height);
+  const auto end_time = std::chrono::steady_clock::now();
+  const double elapsed_seconds = std::chrono::duration<double>(end_time - start_time).count();
+  if (!screenshot_written && !options.screenshot.empty()) {
+    glfwGetFramebufferSize(window, &fb_width, &fb_height);
+    screenshot_written = capture_png(options.screenshot, fb_width, fb_height);
   }
 
-  reim::log::info("preview", std::format("REIMPreview S1 exiting after {} frames", frame));
+  if (state.auto_walk_started && !state.auto_walk_finished) {
+    state.auto_walk_finished = true;
+    submit_key(state, REIM_KEY_W, REIM_ACTION_RELEASE);
+    const float dx = last_frame.player.position.x - state.auto_walk_from.x;
+    const float dz = last_frame.player.position.z - state.auto_walk_from.z;
+    state.auto_walk_distance = std::sqrt(dx * dx + dz * dz);
+  }
+
+  const double average_fps =
+      elapsed_seconds > 0.0 ? static_cast<double>(frames) / elapsed_seconds : 0.0;
+  reim::log::info("preview",
+                  std::format("exiting after {} frames in {:.2f}s ({:.1f} avg FPS) [{}]",
+                              frames, elapsed_seconds, average_fps, exit_reason));
+
+  write_report(options.report, last_frame, renderer.stats(), frames, elapsed_seconds,
+               average_fps, screenshot_written ? options.screenshot : std::string(),
+               exit_reason, state.auto_walk_distance);
+
+  release_mouse(window, state);
+  dll.api->stop(instance);
+  dll.api->destroy(instance);
+  hud.shutdown();
+  renderer.shutdown();
   glfwDestroyWindow(window);
   glfwTerminate();
+#ifdef _WIN32
+  ::FreeLibrary(dll.module);
   if (log_file) std::fclose(log_file);
+#endif
+
+  if (exit_reason == "fetch_frame_failed") return 8;
+  if (!last_frame.ready) return 9;
   return 0;
 }

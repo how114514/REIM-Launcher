@@ -9,13 +9,17 @@
  * can discard stale work.
  *
  * Vertex layout is packed and stable:
- *   offset 0  float position[3]
- *   offset 12 float normal[3]
+ *   offset 0  float position[3]  (world space, blocks; section coords + 0..16)
+ *   offset 12 float normal[3]    (unit face normal, +X east / +Z south)
  *   offset 24 float uv[2]        (atlas normalized coordinates)
  *   offset 32 uint16 light       (high byte skylight 0..15, low byte blocklight 0..15)
  *   offset 34 uint16 sprite      (atlas tile index, informational)
  *   offset 36 uint32 tint        (RGBA8, r in the low byte)
  *   size 40
+ *
+ * An update whose vertex_count/index_count are zero replaces that (section,
+ * material) with nothing, which is how the Runtime clears a material that a
+ * remesh culled away. A SectionRemove drops every material of the section.
  */
 #ifndef REIM_RENDER_H
 #define REIM_RENDER_H
@@ -137,10 +141,16 @@ typedef struct ReimRenderFrame {
   /* Measured simulation rate over the last second (informational). */
   float measured_tps;
   float measured_frame_ms;
+
+  /* Maximum distance a third-person Host may pull the camera back along
+   * -forward before it enters a colliding block (0..4 blocks). The Runtime
+   * computes this because only it can query world collision. A first-person
+   * Host may ignore it. */
+  float third_person_distance;
 } ReimRenderFrame;
 
 #define REIM_RENDER_FRAME_MIN_SIZE \
-  ((uint32_t)(offsetof(ReimRenderFrame, measured_frame_ms) + sizeof(float)))
+  ((uint32_t)(offsetof(ReimRenderFrame, third_person_distance) + sizeof(float)))
 
 #ifdef __cplusplus
 static_assert(sizeof(ReimVertex) == REIM_VERTEX_STRIDE,

@@ -503,8 +503,8 @@ build\m1\bin\REIMPreview.exe --minecraft-dir <dir> --world <save> --generated ge
 |---|---|---|---|
 | S1 基础与 Converter | 完成 | M1-A/B：可构建空目标；Converter 摄取/分析/数据提取；`tools\s1-smoke.ps1` | B4 reports 受“不启动 Java”限制，记录于 `extraction_report.json` |
 | S2 真实世界数据 | 完成 | C1–C7：NBT/Anvil/level.dat/区块调色板；`reim-convert inspect-world`（529 区块、553 样本、0 跳过）；`tools\mc-oracle.py` 对比 5901 项 0 差异；`tools\s2-smoke.ps1` | 26.3 的 `dimensions/` 布局、字符串/compound 调色板与 `spawn.pos` 为 IntArray 均已按实档实现；server 存档无 Player。下一步 S3：复用 `reim::world::World`，不要重写数据层 |
-| S3 Runtime 与网格 | 未开始 | — | 依赖 S2 的世界数据 |
-| S4 显示、操作与验收 | 未开始 | — | 依赖 S3 的 ABI/网格/G1 |
+| S3 Runtime 与网格 | 完成 | M1-D/E：真实世界半径加载（默认 6，169 chunks）、20 TPS 线程/追帧上限、AABB 0.6×1.8 碰撞/重力/跳跃、输入队列、流式加载/卸载；ABI 实例与版本校验；16³ section 网格（不透明/半透明、面剔除、跨区块边界）、增量 update/remove、网格缓存；`reim-headless.exe --headless --ticks N --dump`；`tools\s3-smoke.ps1` | 冒烟：ready、100 tick、~19.9 TPS、205 meshed sections、430k 顶点、跨区块行走通过；测试存档仅 25 个非空区块且多数 section 无光照层（light=0），S4 需方向光兜底；零顶点 update 表示清除该材质；S4 从 `REIMPreview.exe` 改用新 ABI 帧 |
+| S4 显示、操作与验收 | 完成 | M1-F/G/H：OpenGL 3.3 Host（增量网格、视锥剔除、透明排序、方向光/雾、HUD、鼠标捕获/输入、方向键视角、F5 第三人称、F8 AABB）；第三人称相机由 Runtime 沿碰撞回拉；统一参数与错误路径；`tools\s4-acceptance.ps1`/`s4-smoke.ps1`；`tools\mc-oracle.py runtime`；`docs\M1_ACCEPTANCE.md` | 自动化：169 chunks、205 sections、TPS≈20.0、avg FPS≈164、auto-walk 12.57 方块、oracle 0 mismatch；60s 冒烟 tick=1198 无崩溃。G1 第 2 条人工手感与第 6 条 10 分钟 soak **未运行**，由用户执行 `-SoakSeconds 600`；非完整方块/单维度/只读为 M1 已知限制 |
 
 **状态写法**：`未开始` → `进行中` → `完成`；若阻塞写 `阻塞：<原因>`。只更新本表，不在这里写长篇总结。
 

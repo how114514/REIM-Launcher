@@ -1,119 +1,66 @@
 /*
- * mc_26.3.dll, S1 skeleton.
+ * mc_26.3.dll: versioned C ABI entry points.
  *
- * M1-A/M1-B deliverable: the versioned C ABI is exported, LoadLibrary +
- * GetProcAddress("reim_get_api") works, and create() performs the
- * Converter -> Runtime contract check (profile, ABI, generated file hashes)
- * before failing with a clear "runtime core is scheduled for S3" diagnostic.
- *
- * The gameplay world/player/mesh pipeline is M1-D/E (S3) and is intentionally
- * absent here; no world data is simulated or fabricated in S1.
+ * S3 (M1-D/E) replaces the S1 contract stub. create() validates the Converter
+ * manifest, opens the real world and generated block/texture tables; start()
+ * launches the fixed 20 TPS simulation thread. The gameplay world and mesh
+ * cache belong to the simulation thread only (core/simulation.h); the render
+ * thread sees immutable frame snapshots through fetch_frame.
  */
 #include "reim_abi.h"
 
-#include "data/generated_manifest.h"
+#include "src/runtime_instance.h"
 #include "util/log.h"
-#include "util/utf.h"
 
-#include <cstring>
-#include <filesystem>
-#include <string>
+#include <cstdint>
 
 namespace {
 
+using reim::runtime::RuntimeInstance;
+
 constexpr uint32_t kExpectedAbi = REIM_ABI_VERSION;
-constexpr const char* kExpectedProfile = "26.3";
-
-struct InstancePlaceholder {
-  uint32_t magic = 0x5245494Du; // "REIM"
-};
-
-void log_to_host(const ReimHostApi* host, int32_t level, const char* category,
-                 const char* message) {
-  if (host && host->log) {
-    host->log(level, category, message);
-  }
-}
 
 ReimInstance* REIM_CALL create_instance(const ReimInstanceConfig* config,
                                         const ReimHostApi* host,
                                         int32_t* out_error) {
-  if (out_error) *out_error = REIM_ERR_INVALID_ARGUMENT;
-  if (!config || !out_error) {
-    log_to_host(host, REIM_LOG_ERROR, "abi", "create: null config/out_error");
-    return nullptr;
-  }
-  if (config->abi_version != kExpectedAbi) {
-    *out_error = REIM_ERR_ABI_MISMATCH;
-    log_to_host(host, REIM_LOG_ERROR, "abi",
-                "create: instance config ABI mismatch");
-    return nullptr;
-  }
-  if (config->struct_size < REIM_INSTANCE_CONFIG_MIN_SIZE) {
-    *out_error = REIM_ERR_INVALID_ARGUMENT;
-    log_to_host(host, REIM_LOG_ERROR, "abi",
-                "create: instance config struct_size too small");
-    return nullptr;
-  }
-  if (!config->generated_path) {
-    *out_error = REIM_ERR_INVALID_ARGUMENT;
-    log_to_host(host, REIM_LOG_ERROR, "abi",
-                "create: generated_path is required");
-    return nullptr;
-  }
-
-  const std::filesystem::path generated_dir(config->generated_path);
-  reim::data::GeneratedManifest manifest;
-  std::string error;
-  if (!reim::data::validate_generated(generated_dir, kExpectedProfile,
-                                      kExpectedAbi, manifest, error)) {
-    *out_error = REIM_ERR_VERSION_MISMATCH;
-    const std::string message = "create: generated data rejected: " + error;
-    log_to_host(host, REIM_LOG_ERROR, "data", message.c_str());
-    return nullptr;
-  }
-
-  const std::string message =
-      "S1: ABI and generated manifest validated (" + manifest.profile +
-      ", " + std::to_string(manifest.blocks_total) + " blocks, " +
-      std::to_string(manifest.sprites) + " sprites); world/player runtime is M1-D (S3)";
-  log_to_host(host, REIM_LOG_INFO, "runtime", message.c_str());
-  *out_error = REIM_ERR_INTERNAL;
-  return nullptr;
+  return reinterpret_cast<ReimInstance*>(
+      RuntimeInstance::create(config, host, out_error));
 }
 
 void REIM_CALL destroy_instance(ReimInstance* instance) {
-  delete reinterpret_cast<InstancePlaceholder*>(instance);
+  delete reinterpret_cast<RuntimeInstance*>(instance);
 }
 
-int32_t REIM_CALL start_instance(ReimInstance*) {
-  return REIM_ERR_NOT_STARTED;
+int32_t REIM_CALL start_instance(ReimInstance* instance) {
+  if (!instance) return REIM_ERR_INVALID_ARGUMENT;
+  return reinterpret_cast<RuntimeInstance*>(instance)->start();
 }
 
-void REIM_CALL stop_instance(ReimInstance*) {}
-
-int32_t REIM_CALL fetch_frame(ReimInstance*, ReimRenderFrame* out) {
-  if (!out) return REIM_ERR_INVALID_ARGUMENT;
-  if (out->struct_size < REIM_RENDER_FRAME_MIN_SIZE) return REIM_ERR_INVALID_ARGUMENT;
-  std::memset(out, 0, sizeof(*out));
-  out->struct_size = sizeof(ReimRenderFrame);
-  out->abi_version = kExpectedAbi;
-  return REIM_ERR_NOT_STARTED;
+void REIM_CALL stop_instance(ReimInstance* instance) {
+  if (!instance) return;
+  reinterpret_cast<RuntimeInstance*>(instance)->stop();
 }
 
-void REIM_CALL submit_input(ReimInstance*, const ReimInputEvent*) {}
+int32_t REIM_CALL fetch_frame(ReimInstance* instance, ReimRenderFrame* out) {
+  if (!instance) return REIM_ERR_INVALID_ARGUMENT;
+  return reinterpret_cast<RuntimeInstance*>(instance)->fetch_frame(out);
+}
 
-void REIM_CALL set_simulation_paused(ReimInstance*, uint8_t) {}
+void REIM_CALL submit_input(ReimInstance* instance, const ReimInputEvent* event) {
+  if (!instance) return;
+  reinterpret_cast<RuntimeInstance*>(instance)->submit_input(event);
+}
 
-int32_t REIM_CALL get_status_json(ReimInstance*, char* buffer, uint32_t buffer_size) {
-  static constexpr const char* kStatus =
-      "{\"stage\":\"S1\",\"runtime\":\"abi-stub\",\"world\":false,"
-      "\"note\":\"world/player/mesh runtime is M1-D (S3)\"}";
-  const size_t length = std::strlen(kStatus);
-  if (!buffer || buffer_size == 0) return static_cast<int32_t>(length + 1);
-  if (buffer_size <= length) return REIM_ERR_INVALID_ARGUMENT;
-  std::memcpy(buffer, kStatus, length + 1);
-  return static_cast<int32_t>(length);
+void REIM_CALL set_simulation_paused(ReimInstance* instance, uint8_t paused) {
+  if (!instance) return;
+  reinterpret_cast<RuntimeInstance*>(instance)->set_paused(paused != 0);
+}
+
+int32_t REIM_CALL get_status_json(ReimInstance* instance, char* buffer,
+                                  uint32_t buffer_size) {
+  if (!instance) return REIM_ERR_INVALID_ARGUMENT;
+  return reinterpret_cast<RuntimeInstance*>(instance)->get_status_json(buffer,
+                                                                       buffer_size);
 }
 
 const ReimRuntimeApi kApi = {

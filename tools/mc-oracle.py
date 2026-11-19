@@ -791,6 +791,31 @@ def cmd_compare(args) -> int:
     return 1 if failures else 0
 
 
+def cmd_runtime(args) -> int:
+    """Compare the Runtime's status.samples (M1-H4) against this oracle."""
+    report = json.loads(Path(args.report).read_text(encoding="utf-8"))
+    world = WorldView(Path(args.world))
+    samples = report.get("status", {}).get("samples", [])
+    failures = []
+    checks = 0
+    for sample in samples:
+        dimension = sample.get("dimension", "minecraft:overworld")
+        name, _properties, present = world.block_at(
+            dimension, sample["x"], sample["y"], sample["z"]
+        )
+        label = f"sample {dimension} {sample['x']},{sample['y']},{sample['z']}"
+        compare_value(failures, f"{label}.block", sample["block"], name)
+        compare_value(failures, f"{label}.chunk_present", True, present)
+        checks += 2
+    print(
+        f"oracle runtime compare: {checks} checks, {len(failures)} failure(s), "
+        f"{len(samples)} sample(s)"
+    )
+    for failure in failures[:30]:
+        print("  MISMATCH " + failure, file=sys.stderr)
+    return 1 if failures else 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subcommands = parser.add_subparsers(dest="command", required=True)
@@ -826,6 +851,13 @@ def build_parser() -> argparse.ArgumentParser:
     compare.add_argument("--report", required=True)
     compare.add_argument("--check-chunks", action="store_true")
     compare.set_defaults(func=cmd_compare)
+
+    runtime = subcommands.add_parser(
+        "runtime", help="compare a reim-headless runtime report's block samples"
+    )
+    runtime.add_argument("--world", required=True)
+    runtime.add_argument("--report", required=True)
+    runtime.set_defaults(func=cmd_runtime)
 
     return parser
 

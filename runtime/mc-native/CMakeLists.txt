@@ -8,11 +8,15 @@ add_library(reim_core STATIC
   util/compression.cpp
   samples/packed_bits.cpp
   data/generated_manifest.cpp
+  data/block_table.cpp
   nbt/nbt.cpp
   anvil/region.cpp
   world/chunk.cpp
   world/level.cpp
   world/world.cpp
+  mesh/section_mesh.cpp
+  core/player.cpp
+  core/simulation.cpp
 )
 target_include_directories(reim_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(reim_core PUBLIC reim_thirdparty reim_headers)
@@ -25,6 +29,7 @@ endif()
 
 add_library(mc_26_3 SHARED
   src/library.cpp
+  src/runtime_instance.cpp
 )
 target_link_libraries(mc_26_3 PRIVATE reim_core reim_contract)
 target_compile_definitions(mc_26_3 PRIVATE REIM_BUILD_DLL)

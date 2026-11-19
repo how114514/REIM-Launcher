@@ -1,5 +1,9 @@
 add_executable(REIMPreview
   main.cpp
+  gl_loader.cpp
+  gl_renderer.cpp
+  hud.cpp
+  render_math.cpp
 )
 target_link_libraries(REIMPreview PRIVATE
   reim_core
