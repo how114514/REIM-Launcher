@@ -145,6 +145,8 @@ M4 的 UI 骨架可在 M2 后启动，但产品验收必须同时具备 M2 与 M
 
 **前置依赖**：M1 的 Runtime 与 Rendering Contract 稳定；开发机具备 UE 5.8.4、MSVC/CMake 与打包环境。
 
+> 执行级任务拆分、ABI v2/快照所有权、R0 渲染、Converter UE Adapter 集成/NativeBuild、Shipping 打包与验收命令见 `M2_PLAN.md`。
+
 ### 4.2 工作内容
 
 | 工作线 | 任务 | 说明 |
