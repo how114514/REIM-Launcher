@@ -63,7 +63,7 @@ powershell -ExecutionPolicy Bypass -File tools\s4-acceptance.ps1 -PreviewSeconds
 | 缺失世界错误路径 | PASS | 明确错误，退出码 2 |
 | 无效 DLL 错误路径 | PASS | LoadLibrary/ProcAddress 失败被报告 |
 | 生成物 manifest | PASS | DLL create 接受 manifest |
-| 10 分钟 soak | **未运行** | 默认跳过；用 `-SoakSeconds 600` 执行 |
+| 10 分钟 soak | **未运行（用户豁免）** | 用户明确决定跳过；其余自动检查全部 PASS |
 
 快速稳定性冒烟（**60 秒**，非 10 分钟门禁）：
 
@@ -87,19 +87,25 @@ REIMPreview.exe --world <save> --generated generated\26.3 --hidden --seconds 60 
 | # | 条目 | 状态 | 依据 |
 |---|---|---|---|
 | 1 | 真实 26.3 存档显示实际区块/地形 | PASS（自动） | Preview 报告 + 截图；169 初始区块、205 网格 section |
-| 2 | 第一人称移动/转向/跳跃/基础碰撞 | PARTIAL | Runtime 输入与碰撞由 S3 集成测试覆盖；本会话 `--auto-walk` 经 Host→ABI 前进 12.57 方块；**鼠标手感/10 分钟人工操作待用户** |
+| 2 | 第一人称移动/转向/跳跃/基础碰撞 | PASS（用户验收） | `--auto-walk` 经 Host→ABI 前进 12.57 方块；S3 集成测试覆盖 Runtime 输入/碰撞；用户 2026-11-19 实际运行 Preview、确认画面后接受 |
 | 3 | 无 `javaw.exe`/JVM/classpath | PASS | Preview 运行期间 `Get-Process javaw,java` 为 none；两个 Host 均无 classpath/JVM 启动路径 |
 | 4 | Renderer 只读快照 | PASS（设计） | Preview 独立进程，仅调用 C ABI；世界/模拟在 DLL 线程 |
 | 5 | 固定 20 TPS，FPS 独立波动 | PASS（自动） | TPS≈20.0，FPS≈164 |
-| 6 | 连续 10 分钟无崩溃 | **未运行** | 由用户执行 `-SoakSeconds 600` |
+| 6 | 连续 10 分钟无崩溃 | **WAIVED（未执行）** | 用户明确决定不做 10 分钟 soak；已执行 60 秒冒烟，但不宣称该项实测通过 |
 | 7 | 区块方块数据与原始 NBT 一致 | PASS（自动） | Python oracle 独立实现，0 mismatch |
 | 8 | 关键数据来自 Converter | PASS | DLL create 校验 `manifest.json`/profile/ABI；图集与方块表来自 `generated/26.3` |
 
-**G1 结论：未形成。** 第 2 条人工部分与第 6 条 10 分钟 soak 尚未执行，不得宣称 G1 通过。
+**G1 结论：按用户决定通过（accepted）。** 用户于 2026-11-19 实际运行 Preview、确认画面后明确接受 M1。
+
+如实说明：第 6 条“连续 10 分钟无崩溃”**未执行**，属于用户显式豁免，不是实测通过；第 2 条由用户实际运行画面验收，配合自动输入/碰撞测试作为依据。其余各条均有自动检查或设计审查依据。M2 以本验收记录作为启动依据。
 
 ---
 
-## 4. 手动验收清单（用户执行）
+## 4. 手动验收结果与回归清单
+
+**结果（2026-11-19）**：用户运行 `REIMPreview.exe` 并确认画面正常，据此接受 M1。第 6 步的 10 分钟连续操作与第 7 步的 600 秒 soak 经用户明确决定不执行。
+
+以下保留为后续回归检查项：
 
 1. `REIMPreview.exe --world <save> --generated generated\26.3`
 2. 点击窗口捕获鼠标；移动鼠标观察视角连续、无跳变；ESC 释放，再按 ESC 退出。
@@ -108,7 +114,6 @@ REIMPreview.exe --world <save> --generated generated\26.3 --hidden --seconds 60 
 5. 不使用鼠标时，用 ↑↓←→ 确认视角以固定速率旋转。
 6. 连续移动/观察 10 分钟；检查 `build\m1\bin\logs\preview.log` 的 stats 行与退出。
 7. 跑完整门禁 soak：
-6. 跑完整门禁 soak：
 
 ```bat
 powershell -ExecutionPolicy Bypass -File tools\s4-acceptance.ps1 -SoakSeconds 600

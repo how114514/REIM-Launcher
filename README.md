@@ -96,7 +96,7 @@ R0 **不是**原版 Java 渲染逻辑/OpenGL 绘制命令回放。
 - 本文档是**架构基线**，不是已实现产品。
 - 主版本基线：Minecraft Java Edition **26.3**（协议 777 / DataVersion 5023 / 资源包 97.1 / 数据包 121.0 / Java 25）。
 - UE 基线：**5.8.4**（开发/CI）；用户侧不安装。
-- 已对 26.3 做静态字节码普查（11,383 个类 + 45 个依赖库）；当前首要目标是 M1（C++ Native Gameplay Preview），Converter 自 M1 启动并与 Runtime 共同演进；真实世界加载与运行原型仍待验证，详见 ROADMAP 与 ARCHITECTURE 附录 E。
+- 已对 26.3 做静态字节码普查（11,383 个类 + 45 个依赖库）。M1（C++ Native Gameplay Preview）已完成并通过用户验收：真实 26.3 存档加载、固定 20 TPS Runtime、OpenGL 预览与自动验收脚本；验收记录、豁免项与已知限制见 [docs/M1_ACCEPTANCE.md](docs/M1_ACCEPTANCE.md)，下一步按 [docs/ROADMAP.md](docs/ROADMAP.md) 进入 M2。
 
 ## 法律与资产
 
