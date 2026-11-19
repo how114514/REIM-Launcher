@@ -2,3 +2,28 @@
 *.iml
 .DS_Store
 Thumbs.db
+
+# Build outputs
+build/
+generated/
+work/
+logs/
+*.log
+*.pdb
+*.ilk
+*.obj
+*.exe
+*.dll
+*.lib
+*.exp
+
+# Local IDE state
+.vs/
+out/
+
+# Generated inspection reports (use --out under build/ or a temp directory)
+inspect-world.json
+inspect-world-rerun.json
+
+# Mojang metadata downloaded during setup; never commit Mojang files (M1-D06)
+version_manifest_v2.json

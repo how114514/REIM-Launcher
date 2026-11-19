@@ -501,8 +501,8 @@ build\m1\bin\REIMPreview.exe --minecraft-dir <dir> --world <save> --generated ge
 
 | 会话 | 状态 | 已完成 | 已知问题 / 下一步 |
 |---|---|---|---|
-| S1 基础与 Converter | 未开始 | — | 先确认环境与 26.3 文件路径 |
-| S2 真实世界数据 | 未开始 | — | 依赖 S1 的 Converter 产物 |
+| S1 基础与 Converter | 完成 | M1-A/B：可构建空目标；Converter 摄取/分析/数据提取；`tools\s1-smoke.ps1` | B4 reports 受“不启动 Java”限制，记录于 `extraction_report.json` |
+| S2 真实世界数据 | 完成 | C1–C7：NBT/Anvil/level.dat/区块调色板；`reim-convert inspect-world`（529 区块、553 样本、0 跳过）；`tools\mc-oracle.py` 对比 5901 项 0 差异；`tools\s2-smoke.ps1` | 26.3 的 `dimensions/` 布局、字符串/compound 调色板与 `spawn.pos` 为 IntArray 均已按实档实现；server 存档无 Player。下一步 S3：复用 `reim::world::World`，不要重写数据层 |
 | S3 Runtime 与网格 | 未开始 | — | 依赖 S2 的世界数据 |
 | S4 显示、操作与验收 | 未开始 | — | 依赖 S3 的 ABI/网格/G1 |
 
