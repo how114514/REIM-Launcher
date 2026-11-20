@@ -127,7 +127,7 @@
 | Unreal Engine/Editor | **不需要** | Runtime 是 Shipping 发布包 |
 | Windows | 10/11 x64 | 首发 |
 | VC++ 运行库 | 2015–2022 x64 | app-local 或预置安装器 |
-| DirectX | DX11 最低；DX12 推荐 | Nanite/Lumen 等需 DX12+SM6 |
+| DirectX | DX12/SM6 为要求；DX11 不支持 | Nanite/Lumen 等同样需 DX12+SM6 |
 | GPU 驱动 | 用户自备 | 不支持的系统/驱动给出明确提示 |
 | 磁盘/内存 | 按基准场景定 | 资源包/渲染距离影响 |
 | 用户插件安装 | **不需要** | 插件已打进 Runtime |

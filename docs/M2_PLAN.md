@@ -1,9 +1,11 @@
 # REIM M2 执行计划 — UE Native Rendering（R0 + Shipping）
 
-> 基线：Minecraft Java Edition 26.3 / Unreal Engine 5.8.4 / Windows x64。  
-> 本文是 `ROADMAP.md` 第二阶段（M2）的执行级拆分，供新对话直接实施；与 `ROADMAP.md`、`ARCHITECTURE.md` 冲突时以两者为准。  
+> 基线：Minecraft Java Edition 26.3 / Unreal Engine 5.8.4 / Windows x64 / DX12 SM6。  
+> 本文是 `ROADMAP.md` 第二阶段（M2）的执行级拆分，供新对话直接实施；与 `ROADMAP.md`、`ARCHITECTURE.md` 冲突时以两者为准，但 **DX12/SM6 平台定位与本文的 M2 范围以本文为准**。  
 > 前置依据：`docs/M1_ACCEPTANCE.md`（M1 已按用户决定验收通过，含 10 分钟 soak 豁免）。  
-> 本文不提供日期或工期承诺；完成与否只看验收条件与门禁。
+> 本文不提供日期或工期承诺；完成与否只看验收条件与门禁。  
+> 执行位置：M2 的 UE 构建、Cook、打包与干净机验收只在 **M2 指定开发机**（已安装 UE 5.8.4，仓库示例路径 `D:\EngineeringDocuments\REIM-Launcher`）执行；§3.2 的环境记录属于该机。其他机器可编辑文档或运行无 UE 部分，但不得据此宣称 M2 环境/UE 验收通过。  
+> 平台定位：本项目以 **DX12/SM6** 为唯一目标渲染路径；DX11 不在 M2 范围，也不作为最低要求。
 
 ---
 
@@ -34,7 +36,7 @@
 
 **完成定义**
 
-在用户自有 26.3 真实存档上，同一份 `mc_26.3.dll` 同时被 `REIMPreview.exe` 与 `REIMRuntime.exe` 驱动；UE Shipping 包在未安装 UE 的干净 Windows 机器上启动并显示真实区块；20 TPS 模拟与渲染 FPS 独立；**UE 运行的是 Converter 工具链产出的 NativeBuild/NativeVersion（含 UE Adapter 描述与校验），而不是手工拼装的 DLL/工程**；临时 Renderer 保留且不形成第二套游戏实现；G2 通过。
+在用户自有 26.3 真实存档上，同一份 `mc_26.3.dll` 同时被 `REIMPreview.exe` 与 `REIMRuntime.exe` 驱动；UE Shipping 包在未安装 UE 的干净 Windows 机器上启动并显示真实区块；20 TPS 模拟与渲染 FPS 独立；**UE 运行的是 Converter 工具链产出的 NativeBuild/NativeVersion（含 UE Adapter 描述与版本/哈希校验），而不是手工拼装的 DLL/工程；M2 的校验针对误用与版本漂移，不宣称防篡改**；临时 Renderer 保留且不形成第二套游戏实现；G2 通过。
 
 ---
 
@@ -59,7 +61,7 @@
 - 不改变 M1 的只读世界、单维度、非完整方块跳过等已知限制。
 - 不启动 Java Edition/JVM；JDK 仅用于离线 Converter/oracle。
 - 不把 Development 包当发布包；不把 UE Editor 发给用户。
-- 不承诺 DX11 完全等价；DX11 作为冒烟项，失败必须记录并列入 M4 前修复；DX12 为主验收路径。
+- 不承诺也不验收 DX11；本项目定位 DX12/SM6，M2 只以 DX12 为渲染验收路径。若未来需要 DX11，单独立项评估。
 - 不把 Java 渲染管线/Shader/RenderType 翻译成 UE；UE 渲染器是原生 Adapter，由 Converter 组合、版本化、校验、打包；不做 GL/命令回放。
 
 ### 1.3 验收（对应 ROADMAP M2）
@@ -70,14 +72,14 @@
 4. UE Shipping 包在**未安装 UE** 的干净 Windows 机器上启动并进入世界。
 5. 临时 Renderer 仍可用于调试/回归，且不形成第二套游戏实现。
 6. 启动、退出、崩溃日志可定位。
-7. Runtime 使用的关键数据/生成代码来自 Converter 可重复产物，生成物版本与 ABI 一致。**M2 执行补充**：Converter 能产出/组合带 UE 渲染 Adapter 的 NativeVersion/NativeBuild；UE 加载并校验该产物，手工复制 DLL/工程不能通过。
+7. Runtime 使用的关键数据/生成代码来自 Converter 可重复产物，生成物版本与 ABI 一致。**M2 执行补充**：Converter 能产出/组合带 UE 渲染 Adapter 的 NativeVersion/NativeBuild；UE 加载并校验该产物，版本/哈希不一致或手工拼装必须被拒绝；M2 的威胁模型是误用/版本漂移，不宣称防篡改。
 
 **G2 门禁**
 
 | 条件 | 通过标准 | 不通过时的处理 |
 |---|---|---|
 | 同 Runtime 双后端 | 同一 DLL/存档在 Preview 与 UE 中给出同一份世界状态（玩家/区块/方块样本一致，渲染差异有记录） | 修 Contract/Bridge，不复制游戏逻辑 |
-| Converter 覆盖 | R0 数据/表/图集 + UE Adapter 集成包由 Converter 可重复产出；NativeVersion/NativeBuild 由工具链组合；Runtime/UE 拒绝不匹配 manifest | 补数据生成/Adapter 打包/校验，不回退到手写表或手工拼装 |
+| Converter 覆盖 | R0 数据/表/图集 + UE Adapter 集成包由 Converter 可重复产出；NativeVersion/NativeBuild 由工具链组合；Runtime 拒绝不匹配 manifest，UE 额外拒绝不匹配 NativeVersion/Adapter | 补数据生成/Adapter 打包/校验，不回退到手写表或手工拼装 |
 | R0 渲染 | 区块/玩家/摄像机可辨认；固定场景截图基线建立 | 缩小 R0 范围，优先保证数据链路 |
 | Shipping 分发 | 干净机（无 UE）可启动并进入世界 | 修运行库/打包/ABI/加载路径，不留给 M4 |
 | 性能/线程 | 20 TPS 与 FPS 独立、稳定；GT Bridge 有预算 | 调整快照/队列/线程模型，不在 GT 上跑模拟 |
@@ -93,18 +95,18 @@
 | M2-D01 | 游戏权威 | 世界状态/物理/输入语义/光照等级仍由 C++ Runtime 决定；UE 只是宿主与渲染后端 |
 | M2-D02 | 单一实现 | `mc_26.3.dll` 只有一份；Preview 与 UE 是两个 Host，不复制 Runtime、不复制网格/存档/物理 |
 | M2-D03 | ABI v2 | 整份 Contract 版本化到 2；新增帧所有权、插值、资产交付、运行时信息；Preview/UE 同步重建，不再提供 v1 服务 |
-| M2-D04 | 帧所有权 | Runtime 通过 `ReimHostApi::alloc` 分配**单块 host-owned blob**，Host 用完调用 `release_frame` 归还；Runtime 不保留 Host 指针，避免 UE RT 迟滞造成悬垂 |
+| M2-D04 | 帧所有权 | Runtime 通过 `ReimHostApi::alloc` 分配**单块 host-owned blob**，Host 用完调用 `release_frame` 归还；Runtime 只记录在途帧块到 release 为止，不保留已释放帧的 Host 指针。`fetch_frame` 锁内只交换快照，blob 分配/序列化在锁外完成，避免 GT 阻塞模拟 |
 | M2-D05 | 插值 | Runtime 发布 `prev/current` 相机与玩家 + `tick_alpha`；UE Game Thread 插值；section 更新仍按 tick |
 | M2-D06 | 坐标转换 | 只在 `REIMBridge` 内做 MC↔UE 转换；Runtime 保持 MC 右手系/米；公式见 §2.1 |
 | M2-D07 | 网格归属 | M2 继续使用 C++ Native mesher；UE 只上传/绘制；不在 UE 侧重写方块模型/网格生成 |
 | M2-D08 | 材质/光照 | 自定义 VertexFactory + 两个材质（不透明/半透明）；顶点光照/色调/雾来自 Runtime；R0 关闭 Lumen/Nanite/自动曝光/TAA |
 | M2-D09 | 资源交付 | 图集 PNG + 元数据通过 ABI `get_asset` 交给 Host；UE 不解析 blocks/textures，Bridge 只读 manifest/`native_version.json`/`ue_adapter.json` 做版本/能力校验；纹理只在 RT 上传 |
-| M2-D10 | 线程 | DLL 内固定 20 TPS；GT 只 `fetch_frame`；RT 上传并释放帧块；GT 不阻塞模拟；DLL 不碰 UObject |
+| M2-D10 | 线程 | DLL 内固定 20 TPS；GT 只 `fetch_frame`（锁内交换、锁外分配/复制）；RT 上传并释放帧块；GT 不阻塞模拟；DLL 不碰 UObject |
 | M2-D11 | 构建 | DLL 用 CMake/MSVC C++20、`/MD`、关闭异常；UE 用 UBT；跨边界只用 C ABI/POD |
 | M2-D12 | 打包 | UE Runtime 包只含 Runtime/Adapter/实例模板/配置；版本相关 DLL 由 NativeVersion 提供，`reim-convert assemble` 组合成 NativeBuild；generated manifest/图集属于用户数据；DLL 用绝对路径 `LoadLibraryExW` |
 | M2-D13 | Converter 范围 | M2 做 R0 所需的数据/manifest v2 + UE Adapter 描述/集成包 + 可重复性；不扩张 JRT/翻译/全量覆盖 |
 | M2-D14 | R0 范围 | 区块几何、图集、顶点光照/色调、雾、天空色、玩家调试代理、摄像机、加载进度、调试 HUD |
-| M2-D15 | 平台 | Windows 10/11 x64；DX12 主验收；DX11 冒烟；DX11 若失败必须记为 M2 已知限制并列入 M4 前修复，不得悄悄删除 DX11 最低要求；不做 Linux/macOS/主机 |
+| M2-D15 | 平台 | Windows 10/11 x64；**DX12/SM6 为唯一目标与验收路径**；DX11 不在 M2 范围、不作为最低要求；若未来需要 DX11 单独立项；不做 Linux/macOS/主机 |
 | M2-D16 | 分发 | M2 Shipping 只用于内部/干净机验收；不分发 Mojang 资产；公开发布留给 M4 前法律评审 |
 | M2-D17 | UE Adapter 归属 | UE 渲染器是 **Native Adapter**（G 路线），源码在 `runtime/host`；Converter pin 版本/hash 并写入 NativeVersion 描述（Adapter 二进制随 Runtime 包）；不从 Java 渲染翻译，不做 GL/命令回放 |
 | M2-D18 | NativeBuild 组合 | `NativeBuild = UE Runtime 包（含 Adapter） + NativeVersion（含 DLL/描述）`；manifest 绑定 UE 5.8.4/Adapter/ABI 2/profile/数据 hash；Launcher 后续只安装/启动该组合 |
@@ -146,9 +148,10 @@ roll_ue  = 0
 | 输入事件 | GT | DLL 模拟线程（下一 tick） | DLL 队列 |
 | 日志 | DLL 任意线程 | Host 回调 | 调用期间有效 |
 
-- `fetch_frame` 只允许 GT 单线程调用；`release_frame` 允许 GT/RT 任意线程；`submit_input` 任意线程。
+- `fetch_frame` 只允许 GT 单线程调用；锁内只交换快照，blob 分配/序列化在锁外；`release_frame` 允许 GT/RT 任意线程且可乱序；`submit_input` 任意线程。
 - `alloc/free` 回调必须线程安全、不得回调 Runtime、不得抛异常。
-- 帧块最多 4 个未释放；超出时 `fetch_frame` 返回 `REIM_ERR_BUSY`（不阻塞模拟），Host 记录并复用上一帧 GPU 状态。
+- 帧块最多 4 个未释放；超出时 `fetch_frame` 返回 `REIM_ERR_BUSY`（不阻塞模拟、不消费 pending），Host 记录并复用上一帧 GPU 状态；首帧无上一帧时保持加载页。
+- DLL 对 pending 更新按字节/条数设上限；超限合并到最新 revision 或标记需要全量重建，不允许无界增长。
 
 ### 2.3 运行时目标产物
 
@@ -171,15 +174,17 @@ roll_ue  = 0
 
 - **Unreal Engine 5.8.4**（Epic 官方安装版即可，必须包含 UBT/RunUAT/Editor）；记录实际安装根目录与版本。安装最小集：Engine 核心 + Windows 平台；Editor symbols 可选；不需要 Starter Content/Templates/Engine Source/多平台。
 - 环境基线：`UE_ROOT` 指向 UE 5.8.4；`UE-LocalDataCachePath=D:\UE-DDC`（避免 C: 被 DDC/Shader 缓存占满）；干净机另行确认。
-- Visual Studio 2022（C++ 游戏开发工作负载）、MSVC 14.50、Windows SDK 10.0.26100。
+- Visual Studio 2022（C++ 游戏开发工作负载）、MSVC 14.44.35207（实测 toolset）、Windows SDK 10.0.26100。
 - CMake 3.28+、Git、Git LFS、Python 3.12、JDK 25（仅 Converter/oracle）。
 - 磁盘：UE 安装 + 工程 + 打包产物建议预留 150 GB；内存 32 GB 推荐。
-- 至少一块支持 DX12/SM6 的 GPU 与驱动；DX11 用于冒烟。
+- 至少一块支持 DX12/SM6 的 GPU 与驱动；DX12 为唯一目标，DX11 不要求。
 - 用户自有 26.3 存档、`generated/26.3`、Minecraft 目录。
-- UE Adapter 构建产物（`runtime/host` 的 UBT 构建/打包结果）与可 pin 的 adapter 版本信息；Converter 不生成该产物。
-- **干净验收机**：Windows 10/11 x64，未安装 UE/Editor/JDK/MSVC/CMake/VS；有可用 DX12 GPU/驱动；或使用带 GPU 直通/独立显卡的物理机/VM。
+- UE Adapter 构建产物（`runtime/host` 的 UBT 构建/打包结果）与 F1a 产出的 `build/m2/adapter/26.3/` 描述/hash；Converter 不生成 UE 代码。
+- **干净验收机**：Windows 10/11 x64，未安装 UE/Editor/JDK/MSVC/CMake/VS；有可用 DX12/SM6 GPU/驱动；或使用带 GPU 直通/独立显卡的物理机/VM。
 
-### 3.2 当前环境检查（2026-11-20 实测）
+### 3.2 M2 指定开发机环境检查（2026-11-20 实测）
+
+> 本节只描述 M2 指定开发机（已安装 UE 5.8.4，仓库示例路径 `D:\EngineeringDocuments\REIM-Launcher`）。M2 的 UE 构建/Cook/打包/干净机验收必须在该机或同等环境执行；其他机器可编辑文档或运行无 UE 部分，但不得据此宣称 M2 环境/UE 验收通过。
 
 - UE 5.8.4 已安装：`D:\Program Files\Epic Games\UE_5.8`；`Build.version` = 5.8.4；UBT/RunUAT/UnrealPak/UnrealInsights/UnrealEditor-Cmd 均存在；`RunUAT -help` 退出码 0。
 - 用最小 C++ 工程实际构建 `EnvCheckEditor Win64 Development` **成功**；使用 MSVC 14.44.35207 + Windows SDK 10.0.26100.0。工程位于 `build/envcheck`（gitignore，不提交）。
@@ -189,10 +194,11 @@ roll_ue  = 0
 - `generated/26.3`、26.3 存档、26.3 版本文件存在；GPU RTX 4060；D: 剩余约 225 GB，C: 约 50 GB。
 - 干净验收机尚未确认；S3 之前必须由用户提供并记录。
 - 仍建议在每个 UE 构建/运行脚本中显式设置 `UE-LocalDataCachePath=D:\UE-DDC`，避免新终端未继承用户变量。
+- M2 的 UE 工作不在其他机器上执行；这些机器只承担文档/无 UE 任务，缺 UE 时按 §3.3 停止 UE 工作。
 
 ### 3.3 缺失处理
 
-- 缺少 UE 5.8.4：停止 UE 相关工作，向用户询问安装路径；不得用 UE 5.7/5.9 或自制渲染器替代 M2 验收。
+- 缺少 UE 5.8.4：在指定开发机上停止 UE 相关工作，向用户询问安装路径；不得用 UE 5.7/5.9、其他机器或自制渲染器替代 M2 验收。
 - 缺少干净机：Shipping 验收标记为阻塞；不得用开发机“模拟干净机”写成通过。
 - 缺少存档/生成物：停止并询问；不得用演示世界或手写表替代。
 - UE 构建失败：保留日志、错误码、模块名；不得把“能打开 Editor”当作 R0 通过。
@@ -253,7 +259,9 @@ build/m2/bin/reim-headless.exe
 build/m2/bin/reim-convert.exe
 runtime/host/Binaries/Win64/REIMRuntime.exe      # UBT 输出（不入库）
 build/m2/ue/Development/REIMRuntime.exe          # m2-build.ps1 暂存副本（可选）
-build/m2/package/Windows/REIMRuntime.exe         # BuildCookRun -archive（UE Runtime 包）
+build/m2/package-dev/Windows/REIMRuntime.exe     # F1a Development BuildCookRun -archive（S1/S2 输入）
+build/m2/package/Windows/REIMRuntime.exe         # F1b Shipping BuildCookRun -archive（S3）
+build/m2/adapter/26.3/                           # F1a 产出的 ue_adapter.json + hash 清单
 build/native-version/26.3/                       # reim-convert package 产物
 build/native-build/26.3/                         # reim-convert assemble 产物（最终可启动组合）
 ```
@@ -277,6 +285,7 @@ M2 引入一个 Host 侧的 `instance.json`，避免 Shipping 依赖长命令行
 ```
 
 - Runtime 只接受 `ReimInstanceConfig` 中的字段；JSON 解析在 Host 侧，不进入 DLL。
+- 相对路径以 `instance.json` 所在目录解析；包内模板只使用相对路径/占位符，不写开发机绝对路径；开发机示例可用绝对路径。
 - `render_level` 在 M2 固定为 0（R0）；其他值拒绝。
 - Shipping 包内自带默认 `instance.json` 模板；真实路径由用户/测试脚本提供，不写死开发机路径。
 
@@ -293,9 +302,10 @@ M2 引入一个 Host 侧的 `instance.json`，避免 Shipping 依赖长命令行
 | A1 | 安装/定位 UE 5.8.4；验证 `Engine/Build/BatchFiles/RunUAT.bat`、Editor、UBT | 版本/路径写入 `M2_ACCEPTANCE.md` 环境表；空 C++ 工程能构建 |
 | A2 | CMake 增加 `m2-debug`/`m2-release` 预设，输出 `build/m2`；ABI v2 头文件可编译 | `cmake --preset m2-release` + 构建通过；M1 构建预设仍可用（代码升级到 ABI v2） |
 | A3 | 创建 `REIM.uproject` 与模块骨架；空地图 `R0.umap`；GameInstance/Subsystem 生命周期 | Development Editor 与 Game 均可启动空场景 |
-| A4 | `REIMRuntimeContent` 插件用 `RuntimeDependencies` 暂存实例模板/配置；DLL 由 NativeVersion 提供，Development 用 NativeBuild 布局加载；manifest 与图集来自用户 `generated/` | Development 下按 NativeBuild 布局加载 DLL；manifest/Adapter 由实例配置校验 |
+| A4 | `REIMRuntimeContent` 插件用 `RuntimeDependencies` 暂存实例模板/配置；S1 从 F1a 产出的 Development Runtime 布局加载 DLL（临时 dev 布局，不做 NativeBuild 校验）；manifest 与图集来自用户 `generated/` | Development 下能加载 ABI v2 DLL 并 create/start；NativeBuild 校验留到 A4b |
+| A4b | S2：切换为 E5 产出的 NativeBuild，启用 `native_version.json`/`ue_adapter.json`/DLL hash 校验 | UE 只从 NativeBuild 启动；版本/哈希不匹配明确失败；不把手工拼装视为可接受路径 |
 | A5 | Host 日志 ↔ DLL 日志回调；`Saved/Logs` 分类日志；崩溃上下文 | 日志含 ABI/profile/世界路径/DLL 版本；失败可定位 |
-| A6 | `tools/m2-build.ps1`、`m2-smoke.ps1` 骨架 | 一条命令构建 CMake + UE 并产出可运行包 |
+| A6 | `tools/m2-build.ps1`、`m2-smoke.ps1` 骨架；S1 内产出 F1a Development Runtime 包与 Adapter 描述 | 一条命令构建 CMake + UE 并产出可运行 Development 包；E4/E5 可直接使用 |
 | A7 | `.gitignore`/Git LFS 规则；UE 临时目录排除 | 仓库不误提交 Binaries/Intermediate/Saved/生成物 |
 
 **验收**：UE Development 启动空场景；Bridge 能 `LoadLibraryExW` 加载 ABI v2 DLL、`create`/`start`/`stop`；日志与退出码可读；尚未渲染世界。
@@ -304,14 +314,14 @@ M2 引入一个 Host 侧的 `instance.json`，避免 Shipping 依赖长命令行
 
 | 任务 | 内容 | DoD |
 |---|---|---|
-| B1 | ABI v2：版本号、`get_runtime_info`、`get_asset`、`release_frame`、配置扩展（`instance_dir`/`native_version_path`/`render_level`）、帧扩展（prev/current、tick_alpha、owned blob） | 头文件带 `struct_size`/版本注释/线程/单位；编译期布局断言 |
-| B2 | Host-owned 帧块：Runtime 用 `alloc` 组装单块 blob（updates/removes/顶点/索引）；最多 4 块未释放；`release_frame` 释放 | Preview/headless 升级后 1000 tick 无泄漏；超限返回 `REIM_ERR_BUSY` 且模拟不停 |
+| B1 | ABI v2：版本号、`get_runtime_info`、`get_asset`、`release_frame`、`request_full_snapshot`、配置扩展（`instance_dir`/`native_version_path`/`render_level`）、帧扩展（prev/current、tick_alpha、owned blob、snapshot_generation/full_snapshot） | 头文件带 `struct_size`/版本注释/线程/单位；编译期布局断言；同步更新 `ARCHITECTURE.md` §8.2 的 ABI 示意 |
+| B2 | Host-owned 帧块：`fetch_frame` 锁内只交换快照，锁外 `alloc`/序列化单块 blob（updates/removes/顶点/索引）；最多 4 块未释放；`release_frame` 释放；pending 按字节/条数限流；`request_full_snapshot` 支持全量重建 | Preview/headless 升级后 1000 tick 无泄漏；GT 复制不持锁；超限返回 `REIM_ERR_BUSY` 且模拟不停；pending 不无界增长；全量快照可重建 |
 | B3 | 插值数据：`prev_camera`/`prev_player`、`tick_alpha`；角度最短路径规则写入头文件 | 单元测试覆盖跨 0/360 yaw、pitch 钳制、tick 未推进时 alpha |
 | B4 | 资产交付：`get_asset(REIM_ASSET_ATLAS_PNG / ATLAS_META)`；生命周期为实例存活期；revision | UE 能拿到 PNG/元数据；Preview 优先改用 `get_asset`，文件路径仅作诊断回退；不匹配 manifest 拒绝 |
 | B5 | 运行时信息/能力：profile、DLL build id、ABI、feature flags、manifest hash；供 UE 侧校验 NativeVersion/Adapter | UE 启动时打印并校验；ABI/profile/Adapter 不匹配明确失败 |
-| B6 | `REIMBridge`：加载/校验/create/start；GT `fetch_frame`；RT 上传后 `release_frame`（NullRHI 下在 GT 消费后释放）；输入队列；暂停；关闭顺序 | NullRHI 下能消费真实帧；无 UAF/泄漏；关闭顺序无挂起 |
+| B6 | `REIMBridge`：加载/校验/create/start；GT `fetch_frame`（锁内交换、锁外复制）；RT 上传后 `release_frame`（NullRHI 下在 GT 消费后释放）；全量快照/device lost 重建；输入队列；暂停；关闭顺序 | NullRHI 下能消费真实帧；无 UAF/泄漏；全量快照可清空并重建 proxy；关闭顺序无挂起 |
 | B7 | 坐标/单位转换工具与测试：位置/法线/yaw/pitch/FOV/裁剪面 | 已知坐标/朝向单测通过；截图验证三角形绕序/背面剔除 |
-| B8 | 背压/预算：单帧 blob 上限 64 MB、update/remove 各 4096、指标（GT fetch ms、blob bytes、pending uploads） | 距离 6/8 加载不超过上限；超限返回明确错误并提示降低距离，不静默丢 section |
+| B8 | 背压/预算：单帧 blob 上限 64 MB、update/remove 各 4096、pending 字节/条数上限、指标（GT fetch ms、blob bytes、pending bytes/uploads、full snapshot 次数） | 距离 6/8 加载不超过上限；超限返回明确错误并提示降低距离/触发全量重建，不静默丢 section；pending 有界 |
 
 **验收**：UE（`-nullrhi`）跑 1000 tick；Preview 与 UE 共用 ABI v2 DLL；帧块所有权测试通过；无模拟阻塞。
 
@@ -319,10 +329,11 @@ M2 引入一个 Host 侧的 `instance.json`，避免 Shipping 依赖长命令行
 
 | 任务 | 内容 | DoD |
 |---|---|---|
+| C0 | VF/材质可行性 spike：确认 light/sprite/tint 如何进入材质（VertexColor/UV/自定义 expression+HLSL），决定 R0 用自定义 VF 还是 `FLocalVertexFactory` + 烘焙属性 | 最小方块材质可运行；方案/限制写入 `M2_ACCEPTANCE.md`；S1 内冻结 |
 | C1 | `AMcWorldRenderer` + `UMcWorldRendererComponent` + `FMcWorldSceneProxy`；一个世界级 Proxy，不按 section 建 Actor | 场景中只有 1–2 个渲染 Actor；section 表可增/改/删/清 |
 | C2 | RT 上传：顶点 MC→UE 转换、VB/IB 创建/更新/销毁；零顶点 update 清除材质；SectionRemove 清整段 | 加载后网格可见；卸载/清空不残留；无 RT 读已释放帧块 |
-| C3 | `FMeshBatch` 绘制：自定义 VertexFactory（position/normal/uv/light/tint）；不透明/半透明分组；section bounds 视锥剔除 | 每个可见 section 有 draw；背面剔除正确；剔除计数可见 |
-| C4 | 材质/Shader：GT 解码图集 PNG（ImageWrapper/ImportBufferAsTexture2D）→ transient 纹理（nearest、无 mip）；顶点光照、方向光兜底、tint/alpha、距离雾；R0 固定太阳方向 | 真实草地/雪/树/水可辨认；无光照层时方向光兜底与 M1 表现一致 |
+| C3 | `FMeshBatch` 绘制：按 C0 结论选择自定义 VertexFactory 或 `FLocalVertexFactory`，传递 position/normal/uv/light/sprite/tint；不透明/半透明分组；section bounds 视锥剔除 | 每个可见 section 有 draw；背面剔除正确；剔除计数可见 |
+| C4 | 材质/Shader：GT 解码图集 PNG（ImageWrapper/ImportBufferAsTexture2D）→ transient 纹理（nearest、无 mip）；按 C0 方案传递 light/sprite/tint；方向光兜底、alpha、距离雾；R0 固定太阳方向 | 真实草地/雪/树/水可辨认；无光照层时方向光兜底与 M1 表现一致；自定义属性路径有截图/说明 |
 | C5 | 摄像机：GT 插值相机、垂直/水平 FOV 转换、近远裁；第三人称调试距离 | 1080p 下视角正确；转头/移动平滑；不穿地 |
 | C6 | 玩家调试代理：由 PlayerSnapshot 驱动简单几何（F5 切换）；不加载皮肤/骨骼 | 第三人称可见玩家位置/尺寸；无玩法逻辑 |
 | C7 | 加载/统计：`ready`/`loading_percent` 加载画面；UE `HighResShot`；HUD 显示 draw/tris/上传毫秒 | 首帧前显示加载；截图可复现；HUD 数字来自实际帧 |
@@ -349,42 +360,43 @@ M2 引入一个 Host 侧的 `instance.json`，避免 Shipping 依赖长命令行
 
 | 任务 | 内容 | DoD |
 |---|---|---|
-| E1 | generated manifest v2（`generated/26.3/manifest.json`）：schema/ABI 2、profile、input hashes、tool version、生成物 hash、atlas/meta 版本、能力；输入绝对路径移入仅本地 `debug_inputs` | Runtime/UE 校验 v2；不匹配明确拒绝；manifest 不泄露开发机绝对路径 |
+| E1 | generated manifest v2（`generated/26.3/manifest.json`）：schema/ABI 2、profile、input hashes、tool version、生成物 hash、atlas/meta 版本、能力；输入绝对路径写入独立本地 `debug_inputs.json`（不参与 manifest hash） | Runtime/UE 校验 v2；不匹配明确拒绝；manifest 不泄露开发机绝对路径 |
 | E2 | `blocks.json`/`textures.json` schema v2：稳定排序、材质类、面级 sprite/tint、图集 tile 元数据；不手改 | 相同输入两次生成 hash 稳定；Runtime/Preview 仍能加载 |
-| E3 | UE Adapter 描述 `ue_adapter.json`：adapter id/version、UE 5.8.4、ABI 2、render level R0、材质/Shader/地图资产 hash、feature flags、平台；由 pinned adapter build 生成 | 描述与实际 UE Adapter 构建一致；篡改/缺失被 UE 拒绝 |
-| E4 | NativeVersion 打包 `reim-convert package`：组合 DLL + generated 数据引用 + `ue_adapter.json` + `native_version.json` + `instance.json` 模板 + `verification.json` → `build/native-version/26.3` | 一条命令产出完整 NativeVersion；UE/Preview 可直接消费；不含绝对开发机路径 |
-| E5 | NativeBuild 组合 `reim-convert assemble`：UE Runtime 包 + NativeVersion → `build/native-build/26.3`；`native_build.json` 记录 runtime/adapter/native version hash | 最终可启动组合由工具链生成；手工拷贝不能通过版本校验 |
-| E6 | 版本绑定/校验：UE Runtime 启动时校验 `native_version.json`、`ue_adapter.json`、generated manifest、DLL/ABI/profile/UE 版本 | 任一不匹配明确报错；不允许“能加载就先跑” |
-| E7 | 可重复性：两次 package/assemble 的生成物 hash 对比、输入 hash、工具版本、adapter pin | 报告写入 `build/m2/reports`；差异为 0 或有解释 |
+| E3 | UE Adapter 描述 `ue_adapter.json`：adapter id/version、UE 5.8.4、ABI 2、render level R0、材质/Shader/地图资产 hash、feature flags、平台；由 F1a 的 `m2-build.ps1` 产出到 `build/m2/adapter/26.3/`（Converter 不生成 UE 代码） | 描述与实际 Adapter 构建一致；缺失/版本不一致明确失败；hash 定义可重复（见 E7） |
+| E4 | NativeVersion 打包 `reim-convert package`：组合 DLL + generated 数据引用 + `ue_adapter.json` + `native_version.json` + `instance.json` 模板 + `verification.json` → `build/native-version/26.3` | 一条命令产出完整 NativeVersion；UE 可直接消费（Preview 仍直接用 `generated/`）；不含绝对开发机路径 |
+| E5 | NativeBuild 组合 `reim-convert assemble`：F1a/F1b 的 UE Runtime 包 + NativeVersion → `build/native-build/26.3`；`native_build.json` 记录 runtime/adapter/native version hash | S2 用 F1a Development 包完成一次 assemble；S3 用 F1b Shipping 包重跑；最终可启动组合由工具链生成；不一致组合被拒绝 |
+| E6 | 版本绑定/校验：UE Runtime 启动时校验 `native_version.json`、`ue_adapter.json`、generated manifest、DLL/ABI/profile/UE 版本；Preview/headless 只校验 manifest/ABI/profile，不依赖 NativeVersion/Adapter | 任一不匹配明确报错；不允许“能加载就先跑” |
+| E7 | 可重复性：定义 canonical hash（排除时间戳/绝对路径；按文件清单+内容；DLL 使用确定性构建选项），两次 package/assemble 对比、输入 hash、工具版本、adapter pin | 报告写入 `build/m2/reports`；差异为 0，或逐项解释（UE cook/PE 时间戳等） |
 | E8 | 决策/覆盖：`conversion-decisions/26.3.md` 记录 UE 渲染=Native Adapter、未做 JRT/Java 渲染翻译、Adapter/Contract 绑定、未支持方块模型 | 不把 M2 写成已完成渲染翻译/全量覆盖；决策可审计 |
-| E9 | 端到端证明：UE 只从 NativeBuild 加载；手工替换 DLL/改 adapter hash/绕过 manifest 被拒绝 | 工具链产物可启动；手工拼装不可通过；证据写入验收记录 |
+| E9 | 端到端证明：UE 只从 NativeBuild 加载；版本/哈希不一致、缺文件、错 Adapter 被明确拒绝 | 工具链产物可启动；不一致组合不可通过；M2 威胁模型是误用/漂移，不宣称防篡改；证据写入验收记录 |
 
 **验收**：R0 所需数据 + UE Adapter 集成包由 Converter 可重复产出；`package`/`assemble` 生成 NativeVersion/NativeBuild；UE 运行工具链产物；M1 的 oracle/Preview 回归不破。
 
-### M2-F — 打包与 Shipping
+### M2-F — 打包与 Shipping（F1a 在 S1，F1b 在 S3）
 
 | 任务 | 内容 | DoD |
 |---|---|---|
-| F1 | `BuildCookRun` 脚本：Development 与 Shipping；`-build -cook -stage -pak -archive`；固定 UE 5.8.4 | 两种配置都能产出 `REIMRuntime.exe` |
-| F2 | UE Runtime 包内容：`REIMRuntime.exe`/Cooked 内容/Adapter、`instance.json` 模板、Config、Licenses、app-local VC++；**不打包** 版本相关 DLL、`generated/`（含 manifest/atlas）、存档、Mojang 资产；NativeBuild 由 `reim-convert assemble` 组合 Runtime 包 + NativeVersion（DLL 在 NativeVersion） | 包内路径无开发机绝对路径；启动时校验 NativeVersion/Adapter 与 Runtime/DLL/UE 版本一致 |
+| F1a | `BuildCookRun` Development 脚本与 Adapter 描述：`-build -cook -stage -pak -archive` 到 `build/m2/package-dev/Windows`，并产出 `build/m2/adapter/26.3/ue_adapter.json`；固定 UE 5.8.4 | S1/S2 可产出 Development `REIMRuntime.exe` 与 Adapter 描述；E4/E5 可直接使用 |
+| F1b | `BuildCookRun` Shipping 脚本：`-build -cook -stage -pak -archive` 到 `build/m2/package/Windows`；固定 UE 5.8.4 | S3 产出 Shipping `REIMRuntime.exe`；不提前宣称通过 |
+| F2 | UE Runtime 包内容（F1a/F1b）：`REIMRuntime.exe`/Cooked 内容/Adapter、`instance.json` 模板、Config、Licenses、app-local VC++；**不打包** 版本相关 DLL、`generated/`（含 manifest/atlas）、存档、Mojang 资产；NativeBuild 由 `reim-convert assemble` 组合 F1a/F1b UE 包 + NativeVersion（S3 用 F1b；DLL 在 NativeVersion） | 包内路径无开发机绝对路径；启动时校验 NativeVersion/Adapter 与 Runtime/DLL/UE 版本一致 |
 | F3 | Shipping 行为：无控制台；暂停/退出菜单；日志文件；DLL fatal → UE 日志/受控退出；崩溃 dump 可选 | 干净机可退出；崩溃时日志含 tick/世界/ABI/DLL 版本 |
 | F4 | DLL 加载安全：绝对路径 `LoadLibraryExW`；限制搜索路径；DLL/ABI/hash 校验 | 缺失/篡改/错误 ABI 明确报错；不加载错误目录同名 DLL |
-| F5 | 干净机验收：未安装 UE/JDK/MSVC/CMake/VS；测试目录 = NativeBuild（Runtime + NativeVersion）+ 用户提供的 `generated/` 与存档副本（不进入包）；进入世界、移动、退出 | 记录机器信息、GPU/驱动、截图、日志；失败不写成通过 |
+| F5 | 干净机验收：未安装 UE/JDK/MSVC/CMake/VS；测试目录 = F1b 产出的 NativeBuild（Runtime + NativeVersion）+ 用户提供的 `generated/` 与存档副本（不进入包）；进入世界、移动、退出 | 记录机器信息、DX12/SM6 GPU/驱动、截图、日志；失败不写成通过 |
 | F6 | 依赖审计：`dumpbin /dependents`、VC++ 运行库、缺失 DLL、Editor 路径、JVM/classpath 检查 | 无缺失依赖；无 UE Editor 路径；无 Java 进程 |
 | F7 | 基线：包大小、冷启动到世界时间、RAM/VRAM、60 秒冒烟 | 数字写入验收记录；异常有解释 |
-| F8 | NativeBuild 组合验收：`assemble` 产出的目录包含 Runtime/NativeVersion/`native_build.json`/实例模板；干净机只拷贝该组合 + 用户数据 | 手工拼装的 DLL/Adapter 不能通过；组合 hash 可追溯 |
+| F8 | NativeBuild 组合验收：`assemble` 产出的目录包含 Runtime/native-version/`native_build.json`/实例模板；干净机只拷贝该组合 + 用户数据 | 版本/哈希不一致的组合不能通过；组合 hash 可追溯；防篡改不在 M2 威胁模型 |
 
-**验收**：Shipping 在干净 Windows 机器启动并进入真实世界；NativeBuild 由工具链组合；DX12 主路径通过；DX11 结果单独记录。
+**验收**：Shipping 在干净 Windows 机器启动并进入真实世界；NativeBuild 由工具链组合；DX12/SM6 路径通过；DX11 不在 M2 范围。
 
 ### M2-G — 双后端回归与性能
 
 | 任务 | 内容 | DoD |
 |---|---|---|
-| G1 | 双后端脚本：同一存档/出生点/auto-walk；Preview 直接用 generated/，UE 从 NativeBuild 启动；各自导出状态 JSON/方块样本 | 玩家位置、区块数、section 数、方块样本一致；渲染差异有记录；UE 侧确认走 NativeBuild |
-| G2 | UE 60 秒冒烟：TPS≈20、FPS 目标、加载/流式、退出；可选长时 soak | 无崩溃；TPS 不随 FPS 波动；日志统计完整 |
-| G3 | Bridge 预算：GT fetch+复制 < 2 ms；RT 上传均值/峰值；帧块未释放计数 | 1080p、距离 6/8 下达标；超预算有 profile 证据 |
+| G1 | 双后端脚本：同一存档/出生点/auto-walk；Preview 直接用 generated/，UE 从 S2 的 Development NativeBuild 启动；各自导出状态 JSON/方块样本 | 玩家位置、区块数、section 数、方块样本一致；渲染差异有记录；UE 侧确认走 NativeBuild |
+| G2 | UE 60 秒冒烟：TPS≈20、FPS 目标、加载/流式、退出；长时 soak 由用户决定并单独记录（M1 豁免不自动继承） | 无崩溃；TPS 不随 FPS 波动；日志统计完整；未执行 soak 标未运行 |
+| G3 | Bridge 预算：稳态 GT fetch+锁外复制 < 2 ms；RT 上传均值/峰值；帧块未释放计数；pending 字节/条数 | 1080p、距离 6/8 下达标；首载/全量快照单独记录；超预算有 profile 证据 |
 | G4 | 无 JVM 检查：UE 进程期间无 `javaw/java`；命令行无 classpath；DLL 无 JVM 依赖 | 检查命令与结果写入报告 |
-| G5 | UE Automation：Bridge NullRHI、R0 场景冒烟、错误路径；脚本包装 | Development 下自动化通过；失败留日志/截图 |
+| G5 | UE Automation：Bridge NullRHI、全量快照/device lost、R0 场景冒烟、错误路径；脚本包装 | Development 下自动化通过；失败留日志/截图 |
 | G6 | “UE 无游戏逻辑”审查：扫描 Source 中存档/NBT/区块网格/物理/方块表代码；代码评审清单 | 只有 Bridge/Renderer 消费 Contract；无第二套实现 |
 | G7 | 回归基线：R0 截图集合、固定相机/种子/资源、性能 JSON | M3 可直接复用；变化有 diff 说明 |
 
@@ -394,11 +406,11 @@ M2 引入一个 Host 侧的 `instance.json`，避免 Shipping 依赖长命令行
 
 | 任务 | 内容 | DoD |
 |---|---|---|
-| H1 | 统一命令与文档：构建、打包、运行、自动化、日志位置 | 文档命令可复现；路径使用实际安装目录 |
-| H2 | 错误矩阵：缺文件/ABI/profile/GPU device lost/最小化/损坏存档/DLL fatal | 每项有明确错误与退出码，不崩溃 |
+| H1 | 统一命令与文档：构建、打包、运行、自动化、日志位置；确认 TECH_STACK/DEVELOPMENT/COMPATIBILITY/ARCHITECTURE 的 DX12 表述与本文一致 | 文档命令可复现；路径使用实际安装目录；文档不再把 DX11 列为要求 |
+| H2 | 错误矩阵：缺文件/ABI/profile/GPU device lost/全量重建失败/最小化/损坏存档/DLL fatal | 每项有明确错误与退出码，不崩溃 |
 | H3 | `tools/m2-acceptance.ps1`：CMake 测试、ABI/双后端、Preview 回归、UE R0 截图、性能、JVM 检查、干净机清单 | 输出 `build/m2/reports/m2-acceptance.json` + 截图；未执行项明确标注 |
 | H4 | `docs/M2_ACCEPTANCE.md`：按 ROADMAP M2 七条 + M2 执行补充（NativeBuild 由工具链产出）与 G2 逐条记录实际运行结果 | 只写实测；豁免/未运行单独标注 |
-| H5 | 已知限制：R0 范围、非完整方块、单维度、只读、光照兜底、DX11、截图差异、无音频/实体/UI | 不夸大成果；与 M1 限制合并表述 |
+| H5 | 已知限制：R0 范围、非完整方块、单维度、只读、光照兜底、DX12-only、截图差异、无音频/实体/UI | 不夸大成果；与 M1 限制合并表述 |
 | H6 | G2 结论与用户可见验收 | 用户实际运行 UE 画面并确认；形成进入 M3 的依据 |
 
 **验收**：ROADMAP M2 七条全部满足，或未执行条目经用户显式豁免并记录，形成 G2 结论。
@@ -408,28 +420,29 @@ M2 引入一个 Host 侧的 `instance.json`，避免 Shipping 依赖长命令行
 ## 6. 顺序与并行
 
 ```text
-M2-A UE 工程/前置
+M2-A/S1 UE 工程/前置 + F1a Development 包
   ├─→ M2-B Contract v2 + Bridge ──→ M2-C R0 Renderer ──→ M2-D Host 输入/UI
   │            │                            │                     │
   ├─→ M2-E Converter / UE Adapter 集成 ←────┘                     │
+  │       （E4/E5 使用 F1a Development 包）                       │
   │            │                                                  │
-  │            └──────────────→ M2-F NativeBuild/Shipping ←──────┘
+  │            └──────────────→ M2-G1 双后端（Development）←──────┘
   │                                      │
-  └──────────────────────────────────────┴─→ M2-G 双后端/性能 ──→ M2-H 验收
+  └──────────────────────────→ M2-F1b Shipping ──→ M2-F5 干净机 ──→ M2-G余/H
 ```
 
 **可并行**
 
 - B（Contract/Bridge）与 E1/E2（数据 v2）可同时推进；B1 的字段冻结后 E1/E2 才能定稿。
 - A 的打包骨架与 B 的 NullRHI 数据面可并行；C 依赖 B 的帧块/资产接口。
-- E3（Adapter 描述）可在 C 的适配器构建产物稳定后定稿；E4/E5（NativeVersion/NativeBuild）依赖 C 与 UE Runtime 包。
-- F 的 `BuildCookRun` 脚本可在 C 之前先跑空场景，但不得提前宣称 Shipping 通过；最终 F 依赖 E 的 NativeBuild。
-- G1 的双后端状态导出可在 D 完成后立即做，不必等完整 F。
-- 干净机 F5 依赖用户提供机器，在 S3 内执行；若机器延迟，S3 先做其余项并记录阻塞。
+- E3（Adapter 描述）由 F1a 在 S1 产出；E4/E5（NativeVersion/NativeBuild）依赖 C、F1a 的 UE Runtime 包与 Adapter 描述。
+- F1a 的 Development `BuildCookRun` 可在 C 之前先跑空场景，并作为 E4/E5 的输入；F1b Shipping 在 E5 后执行，不得提前宣称 Shipping 通过。
+- G1 的双后端状态导出可在 D 完成后立即做，使用 S2 的 Development NativeBuild，不必等完整 Shipping。
+- 干净机 F5 依赖 F1b 与用户提供机器，在 S3 内执行；若机器延迟，S3 先做其余项并记录阻塞。
 
-**关键路径**：A → B → C → E → F → G → H。D 与 E 并行；F 同时依赖 D（Host）与 E（NativeBuild）。
+**关键路径**：A → B → C → F1a → E4 → E5 → A4b/G1 → F1b → F5 → G余 → H。D 与 E 并行；F1b 依赖 D（Host）与 E5（NativeBuild）。
 
-**无 UE 时的处理**：只允许推进 A2（CMake/ABI v2 编译）、B1/B2/B3 的头文件与 Preview/headless 侧、E1/E2/E3/E8 的 schema/描述/决策工作；E4/E5 的打包、C/D/F 必须等 UE。不得生成“UE 截图”。UE 安装是 M2 的硬前置。
+**无 UE 时的处理**：只允许推进 A2（CMake/ABI v2 编译）、B1/B2/B3 的头文件与 Preview/headless 侧、E1/E2/E8 的 schema/决策工作；C/D/F1a/F1b 必须等 UE；E4/E5 需要 F1a。不得生成“UE 截图”。UE 安装是 M2 的硬前置，且只在指定开发机执行。
 
 ---
 
@@ -493,23 +506,33 @@ typedef struct ReimRuntimeApi {
   int32_t (*get_asset)(ReimInstance*, uint32_t kind,
                        const void** out_data, uint64_t* out_size,
                        uint64_t* out_revision);
+  /* 下一次成功 fetch 返回全量 section 与新的 snapshot_generation；
+   * 用于 GPU device lost/重建/错过更新。 */
+  int32_t (*request_full_snapshot)(ReimInstance*);
 };
 ```
 
 - `ReimHostApi` 在 v2 中 **要求** `alloc`/`free` 非空；`log` 仍可选但推荐。
 - `ReimInstanceConfig` v2 追加 `instance_dir`、`native_version_path`、`render_level`、可选 `spawn_yaw`/`spawn_pitch`（诊断/截图）；保留 `struct_size` 校验。
-- `frame_id` 单调递增；`release_frame` 必须与最近的 `fetch_frame` 的 `frame_id` 对应；重复释放是空操作并记警告。
+- `frame_id` 单调递增；`release_frame` 必须对应**任一尚未释放**的 `fetch_frame` 的 `frame_id`，允许乱序；重复释放是空操作并记警告；释放未知/已释放 ID 只记录不崩溃。
+- `request_full_snapshot` 任意线程可调用；Runtime 在下一次成功 `fetch_frame` 返回当前全部已加载 section，并递增 `snapshot_generation`；Host 在 `full_snapshot == 1` 时先清空旧 proxy 再应用。
 
 ### 7.3 帧块与所有权（M2-D04）
 
 ```text
 fetch_frame(out):
+  lock:
+    swap pending_/published_
+    published_ 归 GT；shared_ptr keep 保持数据存活
+  unlock
   Runtime 统计本次 updates/removes/顶点/索引字节数
-  Runtime 调用 host->alloc(total_bytes, 16) 得到 blob
-  Runtime 把 update 结构、remove 结构、顶点、索引按固定顺序写入 blob
+  Runtime 调用 host->alloc(total_bytes, 16) 得到 blob      // 锁外
+  Runtime 把 update 结构、remove 结构、顶点、索引写入 blob  // 锁外
   out->updates/removes/vertices/indices 指向 blob 内部
   out->owned_block = blob; out->owned_bytes = total_bytes
   out->frame_id = ++counter
+  out->snapshot_generation = generation
+  out->full_snapshot = (本次为全量 ? 1 : 0)
 
 Host:
   GT 读取/转换需要的字段（不阻塞模拟）
@@ -518,11 +541,12 @@ Host:
   Runtime 调用 host->free(blob)
 ```
 
-- **最多 4 个未释放帧块**；达到上限时 `fetch_frame` 返回 `REIM_ERR_BUSY`，不分配、不阻塞、不改变模拟；Host 记录并复用上一帧。
+- **最多 4 个未释放帧块**；达到上限时 `fetch_frame` 返回 `REIM_ERR_BUSY`，不分配、不阻塞、不改变模拟、不消费 pending；Host 记录并复用上一帧；首帧无上一帧时保持加载页。
+- pending 更新按字节/条数有界；超限按 `(section, material)` 保留最新 revision，或标记需要全量重建；不得无界增长。
 - `release_frame` 任意线程；Runtime 必须允许 GT/RT 调用；Host `free` 实现需线程安全。
 - 零顶点 update 仍保留在 updates 中，Host 用其清除对应材质；`SectionRemove` 清除整个 section。
-- `fetch_frame` 每次返回**增量**；首次加载包含全部 section；之后只含变更/移除。
-- 帧块是 Host 内存在途数据的唯一所有权载体；Runtime 不持有 `ReimSectionMeshUpdate*` 之外的任何 Host 指针。
+- `fetch_frame` 通常返回**增量**；新实例或 `request_full_snapshot` 后的第一次成功 fetch 返回当前全部已加载 section，并带 `full_snapshot = 1` 与新的 `snapshot_generation`；之后只含变更/移除。
+- 帧块是 Host 内存在途数据的唯一所有权载体；Runtime 只在帧块未释放期间记录 blob 地址以便 `host->free`，不保留已释放帧的 Host 指针。
 
 ### 7.4 插值
 
@@ -531,9 +555,12 @@ ReimRenderFrame v2 追加：
   ReimCameraSnapshot prev_camera;
   ReimPlayerSnapshot prev_player;
   float tick_alpha;        // 0..1，同 partial_tick
+  uint64_t snapshot_generation; // 全量快照代数，每次全量递增
+  uint32_t full_snapshot;       // 1 = 本次包含全部已加载 section
 ```
 
 - `camera`/`player` 为当前 tick 状态；`prev_*` 为上一 tick；`tick_alpha` 为两 tick 之间比例。
+- `full_snapshot == 1` 时 Host 先清空旧 section 表/GPU 缓冲，再应用本帧；`snapshot_generation` 用于丢弃过期的全量重建结果。
 - GT 插值规则：位置线性；yaw/pitch 走最短角路径；`tick_alpha` 在暂停/未推进时保持 0。
 - section/网格不插值；流式/方块变化按 tick 发布。
 - 若 Host 不需要插值（Preview），可直接使用 `camera`/`player`。
@@ -548,8 +575,9 @@ ReimRenderFrame v2 追加：
 ### 7.6 线程/单位/坐标契约（写入头文件）
 
 - `create/destroy/start/stop`：控制线程，互不并发；`destroy` 必须能处理未 `start` 的实例。
-- `fetch_frame`：Host 渲染线程（UE GT）单线程；不得并发调用。
-- `release_frame`：任意线程；不得阻塞。
+- `fetch_frame`：Host 渲染线程（UE GT）单线程；不得并发调用；锁内只交换快照，分配/序列化在锁外。
+- `release_frame`：任意线程、可乱序；不得阻塞。
+- `request_full_snapshot`：任意线程；下一次成功 fetch 返回全量。
 - `submit_input`：任意线程；事件在下一 tick 应用。
 - `get_asset`：实例存活期任意线程；返回内存只读。
 - 1 单位 = 1 方块 = 1 米；右手系/`+Y` 上；UE 转换只在 Bridge。
@@ -561,7 +589,7 @@ ReimRenderFrame v2 追加：
 2. 校验 `native_version.json`（DLL/data hash）与 `ue_adapter.json`（UE 5.8.4/ABI 2/R0/资产 hash）；任一不一致 → 明确错误，不进入世界。
 3. `render_level != 0` → `REIM_ERR_CAPABILITY`。
 4. `struct_size` 小于头文件最小值 → 拒绝；未知字段忽略但记录。
-5. Preview/headless 使用同一套 Contract/数据校验；NativeVersion/Adapter 校验只在 UE Host 与打包脚本中执行，避免调试 Host 依赖 UE。
+5. Preview/headless 只校验 Contract/manifest/ABI/profile；NativeVersion/Adapter/UE 版本校验只在 UE Host 与打包脚本中执行，避免调试 Host 依赖 UE。
 
 ---
 
@@ -586,7 +614,7 @@ ReimRenderFrame v2 追加：
 
 **工程设置（R0 baseline）**
 
-- 固定 UE 5.8.4；Windows x64；DX12 为默认 RHI；DX11 可启动冒烟。
+- 固定 UE 5.8.4；Windows x64；DX12/SM6 为唯一目标 RHI；不配置/不验收 DX11。
 - 关闭 Lumen、Nanite、VSM、自动曝光、TAA、运动模糊；固定分辨率与截图相机。
 - Shipping 不含 Editor-only 模块；不启用控制台依赖。
 - `RuntimeDependencies` 把实例模板、`Config/`、`Licenses/` 与 Adapter 资产放进包；版本相关 `mc_26.3.dll` 由 NativeVersion 提供，不放进通用 Runtime 包；manifest/图集来自用户 `generated/`。
@@ -603,8 +631,9 @@ ReimRenderFrame v2 追加：
   create(config, host) → start()
 
 每帧（GT）：
-  fetch_frame(&frame)
-  if REIM_ERR_BUSY: 复用上一帧 GPU 状态，记录
+  fetch_frame(&frame)              // 锁内交换、锁外复制
+  if REIM_ERR_BUSY: 复用上一帧 GPU 状态，记录；首帧保持加载页
+  if frame.full_snapshot: 清空 section 表/GPU 缓冲，按 snapshot_generation 重建
   维护 pending update map（section/material → 最新 revision）
   创建/更新渲染代理的 section 表
   把 host-owned blob 交给 RT（任务/命令）
@@ -615,6 +644,7 @@ RT 上传完成后：
 ```
 
 - **更新合并**：GT 在处理 blob 前按 `(section, material)` 合并增量；旧 revision 丢弃；remove 与 update 的顺序按 blob 内顺序应用。
+- **全量重建**：`request_full_snapshot` 后第一次成功 fetch 带 `full_snapshot = 1`；GT 清空旧 section/GPU 资源再应用；GPU device lost 时调用。
 - **首次加载**：`ready == 0` 时显示加载页；`ready == 1` 且 pending uploads 为 0 才进入可操作。
 - **纹理**：GT 用 `get_asset` 的 PNG 创建 transient `UTexture2D`；RT 上传 mip 0；material instance 绑定；revision 变化时重建。
 - **关闭**：停止输入 → `set_simulation_paused(true)` → `stop()` → 等待 RT 排空并归还所有未释放帧块 → `destroy()` → 释放纹理/代理。
@@ -625,7 +655,7 @@ RT 上传完成后：
 - **一个世界级 Proxy**：`AMcWorldRenderer`（或 AInfo）+ `UMcWorldRendererComponent`；`CreateSceneProxy` 返回 `FMcWorldSceneProxy`；不为每个 section 建 Actor/Component。
 - **section 表**：Proxy 持 `TMap<(chunkX,sectionY,chunkZ), FMcSectionMeshes>`；每个材质持 VB/IB、bounds、revision；GPU 资源只在 RT 创建/释放。
 - **绘制**：`GetDynamicMeshElements` 每帧按视锥/距离挑选可见 section，生成 `FMeshBatch`；不透明近到远，半透明远到近；每 batch 绑定材质与图集。
-- **顶点工厂**：自定义 `FMcVertexFactory`，输入 position/normal/uv/light/sprite/tint；shader 解码光照与 tint；若 VF 集成受阻，允许 R0 临时退化为 `FLocalVertexFactory` + 烘焙顶点色（Bridge 在 GT 侧把 light+tint 合成为 color），必须在验收记录标注，R1 恢复自定义 VF。
+- **顶点工厂**：按 C0 结论选择 `FMcVertexFactory` 或 `FLocalVertexFactory`；输入 position/normal/uv/light/sprite/tint。自定义顶点属性必须通过材质可读的通道传递（VertexColor/UV/自定义 material expression+HLSL）；若 C0 判定自定义属性路径不稳定，R0 退化为 `FLocalVertexFactory` + 预烘焙属性（light+tint 合成 color，sprite/瓦片信息进 UV），必须在验收记录标注，R1 恢复。
 - **材质**：`M_McBlock`（opaque）与 `M_McBlockTranslucent`（translucent；alpha 取 tint.a，tint.a 为 255 时用 0.72 兜底，与 M1 的水面表现一致）；图集纹理参数；距离雾参数；方向光兜底（skylight/blocklight 全 0 时）。
 - **图集**：nearest、clamp、无 mip/padding（R0 与 M1 一致）；通道顺序按 UE 格式转换；不做动画纹理。
 - **环境**：天空色/雾色/雾起止来自 `EnvironmentSnapshot`；R0 固定太阳方向、无时间变化。
@@ -638,9 +668,9 @@ RT 上传完成后：
 |---|---|---|
 | 模拟 | 20 TPS ± 0.2 | 与 M1 一致；UE 帧率不驱动 tick |
 | 渲染 | 1080p、距离 6–8、60 FPS 目标 | 记录实际 GPU/驱动/画质设置 |
-| GT Bridge | fetch + 合并 + 提交 < 2 ms/帧 | 首次加载/大块上传单独统计 |
+| GT Bridge | 稳态 fetch + 锁外复制 + 合并 + 提交 < 2 ms/帧 | 首次加载/全量快照单独统计；禁止持锁复制 |
 | RT 上传 | 稳态均值 < 4 ms；首载可更高 | 流式更新按 tick 分摊 |
-| 内存/显存 | 记录基线，无持续增长 | 60 秒冒烟中采样 |
+| 内存/显存 | 记录基线，无持续增长 | 含最多 4 个在途 blob + 有界 pending；60 秒冒烟中采样 |
 | 加载 | 首帧到可操作时间记录 | 不承诺固定秒数，只要求可复现 |
 
 ---
@@ -658,16 +688,17 @@ reim-convert inspect-world --world <path> --out report.json
 :: 新增：组合 NativeVersion / NativeBuild
 reim-convert package --profile 26.3 --generated generated/26.3 ^
   --dll build/m2/bin/mc_26.3.dll ^
-  --ue-adapter <pinned-adapter-dir> ^
+  --ue-adapter build/m2/adapter/26.3 ^
   --out build/native-version/26.3
 
+:: S2 用 F1a Development 包；S3 用 F1b Shipping 包重跑
 reim-convert assemble --native-version build/native-version/26.3 ^
-  --runtime-package build/m2/package/Windows ^
+  --runtime-package build/m2/package-dev/Windows ^
   --out build/native-build/26.3
 ```
 
-- `package`：把版本化 DLL、生成数据引用、`ue_adapter.json`、`native_version.json`、实例模板、验证摘要组合成 NativeVersion。
-- `assemble`：把 UE Runtime 包与 NativeVersion 组合成最终 NativeBuild；记录三者的 hash/版本。Runtime 包由 UBT/BuildCookRun（`tools/m2-build.ps1`）产出后交给 `assemble`，M2 不在 C++ 工具内替换 UBT。
+- `package`：把版本化 DLL、生成数据引用、F1a 产出的 `ue_adapter.json`、`native_version.json`、实例模板、验证摘要组合成 NativeVersion。
+- `assemble`：把 F1a/F1b 的 UE Runtime 包与 NativeVersion 组合成最终 NativeBuild；S2 用 F1a Development 包，S3 用 F1b Shipping 包重跑；记录三者的 hash/版本。Runtime 包由 UBT/BuildCookRun（`tools/m2-build.ps1`）产出后交给 `assemble`，M2 不在 C++ 工具内替换 UBT。
 - `package/assemble` **不生成 UE 渲染代码**；它们 pin 并使用 Native Adapter 构建产物，校验 Contract/ABI/profile/UE 版本。
 - M2 不扩张为通用差分框架；必要的 `verify` 只做本地校验。
 
@@ -677,9 +708,10 @@ reim-convert assemble --native-version build/native-version/26.3 ^
 用户自有 Java Edition 26.3 文件
   → prepare / analyze / extract
   → generated/26.3（数据/表/图集/manifest）
-  → package（+ mc_26.3.dll + UE Adapter 描述）
+  → F1a（Development Runtime 包 + Adapter 描述）
+  → package（+ mc_26.3.dll + ue_adapter.json）
   → NativeVersion（版本相关）
-  → assemble（+ UE Runtime/Adapter 包）
+  → assemble（+ F1a/F1b Runtime 包）
   → NativeBuild（可启动：C++ Runtime + UE 渲染）
 ```
 
@@ -690,12 +722,13 @@ reim-convert assemble --native-version build/native-version/26.3 ^
 
 | 文件 | 层级 | M2 内容 |
 |---|---|---|
-| `manifest.json` | generated | schema/ABI 2、profile、input hashes、tool version、生成物/PNG hash、atlas meta 版本、能力；绝对路径仅本地 `debug_inputs` |
+| `manifest.json` | generated | schema/ABI 2、profile、input hashes、tool version、生成物/PNG hash、atlas meta 版本、能力；不含开发机绝对路径 |
+| `debug_inputs.json` | 本地 | 输入绝对路径/调试信息；不参与 manifest hash，不随包分发 |
 | `blocks.json` | generated | 方块表 v2：稳定排序、材质类、面级 sprite/tint、完整方块/碰撞/透明/液体；不新增未使用的模型语义 |
 | `textures.json` | generated | 图集 tile/UV/索引 v2；稳定顺序；与 `atlas.png` 尺寸一致 |
 | `atlas.png` | generated | 用户自有输入生成的图集；M2 只保证 R0 所需方块；不随产品分发 Mojang 资产 |
 | `atlas_meta.json`（或 manifest 内） | generated | 尺寸/tile/padding/采样/格式/hash；经 `get_asset` 交付 |
-| `ue_adapter.json` | NativeVersion | adapter id/version、UE 5.8.4、ABI 2、R0、材质/Shader/地图资产 hash、feature flags、平台 |
+| `ue_adapter.json` | F1a → NativeVersion | adapter id/version、UE 5.8.4、ABI 2、R0、材质/Shader/地图资产 hash、feature flags、平台；由 F1a 产出 |
 | `native_version.json` | NativeVersion | profile、DLL hash、generated manifest hash、adapter hash、ABI、能力、验证摘要 |
 | `instance.json` 模板 | NativeVersion | world/generated/native-version 路径与 Host 设置 |
 | `verification.json` | NativeVersion | 构建/校验结果、输入 hash、工具版本 |
@@ -707,7 +740,8 @@ reim-convert assemble --native-version build/native-version/26.3 ^
 
 - 生成物不手改；修改进入 Converter/Patch。
 - 同一输入/工具版本/Adapter pin 重复执行，生成物 hash 稳定；输入路径不参与内容 hash。
-- Runtime/UE 只接受 manifest v2 + `native_version.json` + `ue_adapter.json`；profile/ABI/hash/UE 版本/adapter 不匹配拒绝启动。
+- Runtime/Preview 只接受 manifest v2 + ABI/profile；UE 额外接受并校验 `native_version.json` + `ue_adapter.json`；任一不匹配拒绝启动。
+- M2 的版本/哈希校验用于误用与版本漂移；本地 JSON/hash 可被编辑，M2 不宣称防篡改；签名/信任根留 M4。
 - Shipping 包不包含 `debug_inputs`/`generated/` 用户路径/存档/Mojang 资产；NativeBuild 只组合 Runtime + NativeVersion，用户数据由实例配置提供。
 - 不把反编译源码/Mojang 文件提交或打包。
 - **UE 渲染是 Native Adapter，不是 Java 渲染翻译**；Converter 的职责是 pin/组合/版本化/校验，不生成 UE C++/材质/Shader。
@@ -719,7 +753,7 @@ reim-convert assemble --native-version build/native-version/26.3 ^
 - 若发现 blocks/textures 字段不足以支撑 R0，优先补数据生成，不在 Runtime/UE 硬编码方块特例。
 - JRT/字节码翻译/DFU 全量适配不进入 M2。
 - NativeVersion/NativeBuild 的目录布局作为稳定接口冻结；Launcher（M4）按该布局安装/启动。
-- **MC 版本升级**：UE Runtime/Adapter 可复用，Converter 重新产出 `mc_<version>.dll`/数据/manifest 并 `assemble` 成新的 NativeBuild；**UE 版本升级**只影响 Adapter/Runtime 包，两条升级线保持独立。
+- **MC 版本升级**：Converter 重新产出 `mc_<version>.dll`/数据/manifest，重新 `package`（Adapter 可复用但 hash 需重绑）并 `assemble`。**UE 版本升级**：重建 Adapter/Runtime 包，并重新 `package` 以更新 `native_version.json` 中的 adapter hash；DLL/data 可复用。两条线共享 NativeVersion schema，但元数据需重新绑定。
 
 ---
 
@@ -741,7 +775,21 @@ cmake --build --preset m2-release --parallel 8
   -waitmutex
 ```
 
-### 10.2 Shipping 打包
+### 10.2 构建与打包（F1a Development / F1b Shipping）
+
+F1a（S1/S2，供 E4/E5 使用）：
+
+```bat
+set UE_ROOT=D:\Program Files\Epic Games\UE_5.8
+set UE-LocalDataCachePath=D:\UE-DDC
+"%UE_ROOT%\Engine\Build\BatchFiles\RunUAT.bat" BuildCookRun ^
+  -project="D:\EngineeringDocuments\REIM-Launcher\runtime\host\REIM.uproject" ^
+  -noP4 -platform=Win64 -clientconfig=Development ^
+  -build -cook -stage -pak -archive ^
+  -archivedirectory="D:\EngineeringDocuments\REIM-Launcher\build\m2\package-dev"
+```
+
+F1b（S3，最终 Shipping）：
 
 ```bat
 set UE_ROOT=D:\Program Files\Epic Games\UE_5.8
@@ -753,7 +801,7 @@ set UE-LocalDataCachePath=D:\UE-DDC
   -archivedirectory="D:\EngineeringDocuments\REIM-Launcher\build\m2\package"
 ```
 
-- IoStore/`-iostore` 二选一，在 F1 记录；启用时产物为 `.utoc/.ucas`。
+- IoStore/`-iostore` 二选一，在 F1a/F1b 记录；启用时产物为 `.utoc/.ucas`。
 - Project Settings → Packaging → Prerequisites 选择 app-local VC++；F6 用 `dumpbin /dependents` 验证。
 - Shipping 不含 Editor-only 模块；确保暂停/退出菜单可用。
 - UBT 的可执行文件实际输出在工程 `Binaries/Win64/`；验收脚本可复制/暂存到 `build/m2/ue/`，但不得把 `Binaries/` 提交仓库。
@@ -764,12 +812,13 @@ set UE-LocalDataCachePath=D:\UE-DDC
 build\m2\bin\reim-convert.exe package --profile 26.3 ^
   --generated generated\26.3 ^
   --dll build\m2\bin\mc_26.3.dll ^
-  --ue-adapter runtime\host\Build\Adapter ^
+  --ue-adapter build\m2\adapter\26.3 ^
   --out build\native-version\26.3
 
+:: S2：Development；S3：Shipping 重跑
 build\m2\bin\reim-convert.exe assemble ^
   --native-version build\native-version\26.3 ^
-  --runtime-package build\m2\package\Windows ^
+  --runtime-package build\m2\package-dev\Windows ^
   --out build\native-build\26.3
 ```
 
@@ -777,14 +826,14 @@ NativeBuild 布局：
 
 ```text
 build/native-build/26.3/
-├─ REIMRuntime/                  # UE Shipping/Development 包
-├─ NativeVersions/26.3/          # mc_26.3.dll + native_version.json + ue_adapter.json
+├─ REIMRuntime/                  # F1a/F1b UE Runtime 包
+├─ native-version/26.3/          # mc_26.3.dll + native_version.json + ue_adapter.json
 ├─ native_build.json             # Runtime/Adapter/NativeVersion 版本与 hash
 └─ instance.json.template
 ```
 
 - 最终可启动的是 NativeBuild，不是单独拷贝的 DLL 或 UE 工程。
-- `ue_adapter` 目录由 UE Adapter 构建产出；Converter 只 pin/校验/组合，不生成 UE 渲染代码。
+- `build/m2/adapter/26.3/` 由 F1a 的 `m2-build.ps1` 产出（`ue_adapter.json` + hash 清单）；Converter 只 pin/校验/组合，不生成 UE 渲染代码。
 
 ### 10.3 运行
 
@@ -793,7 +842,7 @@ build/native-build/26.3/
 build\m2\bin\REIMPreview.exe --world <save> --generated generated\26.3 --render-distance 6
 
 :: UE（从 NativeBuild 启动，Development 或 Shipping）
-build\m2\native-build\26.3\REIMRuntime\REIMRuntime.exe ^
+build\native-build\26.3\REIMRuntime\REIMRuntime.exe ^
   -reim-instance="D:\EngineeringDocuments\REIM-Launcher\build\m2\instance.json" -log
 
 :: UE Shipping（干净机；NativeBuild + 用户数据副本）
@@ -802,11 +851,14 @@ REIMRuntime.exe -reim-instance="C:\REIMTest\instance.json" -log
 
 - 实例路径/生成物/NativeVersion/日志目录由 `instance.json` 提供；CLI 覆盖字段用于自动化。
 - 不把开发机绝对路径写进 Shipping 包；验收脚本生成临时实例配置。
-- UE Runtime 启动时校验 NativeBuild 的 Runtime/Adapter/NativeVersion 版本与 hash；手工替换 DLL 或绕过 manifest 必须失败。
+- UE Runtime 启动时校验 NativeBuild 的 Runtime/Adapter/NativeVersion 版本与 hash；版本/哈希不一致、缺文件、错 Adapter 必须明确失败；M2 不宣称对抗可修改本地文件的恶意篡改。
 
 ### 10.4 自动化
 
 ```bat
+REM F1a
+powershell -ExecutionPolicy Bypass -File tools\m2-build.ps1 -Config Development
+REM F1b
 powershell -ExecutionPolicy Bypass -File tools\m2-build.ps1 -Config Release
 powershell -ExecutionPolicy Bypass -File tools\m2-smoke.ps1 -World <save>
 powershell -ExecutionPolicy Bypass -File tools\m2-acceptance.ps1 -World <save> -UeSeconds 60
@@ -817,17 +869,17 @@ UE Automation（Development）：
 ```bat
 :: 以下路径用 Development NativeBuild；Shipping 不含 Automation
 :: 数据面：无渲染设备
-build\m2\native-build\26.3\REIMRuntime\REIMRuntime.exe ^
+build\native-build\26.3\REIMRuntime\REIMRuntime.exe ^
   -nullrhi -unattended -nopencils ^
   -ExecCmds="Automation RunTests REIM.Bridge; Quit" -log
 
 :: R0 渲染：需要 GPU
-build\m2\native-build\26.3\REIMRuntime\REIMRuntime.exe ^
+build\native-build\26.3\REIMRuntime\REIMRuntime.exe ^
   -unattended -nopencils ^
   -ExecCmds="Automation RunTests REIM.R0; Quit" -log
 ```
 
-- `REIM.Bridge.NullRHI`：加载/ABI/1000 tick/帧块释放/错误路径。
+- `REIM.Bridge.NullRHI`：加载/ABI/1000 tick/帧块乱序释放/全量快照/device lost/错误路径。
 - `REIM.R0.Smoke`：有 GPU 的 R0 场景冒烟；不做像素级断言，截图/统计由验收脚本采集。
 - 自动化失败必须保留日志与截图；不得用“Editor 能打开”替代。
 
@@ -839,12 +891,12 @@ build\m2\native-build\26.3\REIMRuntime\REIMRuntime.exe ^
 
 | 层级 | 内容 | 工具 |
 |---|---|---|
-| 单元 | ABI v2 布局/版本、帧块所有权、插值、坐标转换、manifest 校验 | Catch2 |
+| 单元 | ABI v2 布局/版本、帧块所有权/乱序释放、pending 上限、插值、坐标转换、manifest 校验 | Catch2 |
 | 数据 | 真实区块方块样本 vs Python oracle（沿用 M1） | Python 3.12 |
-| 集成 | headless/Preview ABI v2、1000 tick、流式 | `m1-tests` / CLI |
+| 集成 | headless/Preview ABI v2、1000 tick、流式、全量快照 | `m1-tests` / CLI |
 | Converter | `package`/`assemble`、NativeVersion/NativeBuild hash、Adapter/UE 版本校验 | `reim-convert` + PowerShell |
-| Bridge | NullRHI 加载/帧消费/释放/错误 | UE Automation |
-| 渲染 | R0 截图、视锥/透明、图集、雾 | UE + 人工 |
+| Bridge | NullRHI 加载/帧消费/释放/全量重建/device lost/错误 | UE Automation |
+| 渲染 | R0 截图、视锥/透明、图集、雾、DX12 | UE + 人工 |
 | 双后端 | 同存档/同输入状态对照 | PowerShell + JSON |
 | Shipping | 干净机启动/进入世界/退出 | 人工/脚本记录 |
 | 性能 | TPS/FPS/GT/RT/内存 | UE Insights + 报告 |
@@ -854,9 +906,9 @@ build\m2\native-build\26.3\REIMRuntime\REIMRuntime.exe ^
 - 同步：同一存档/出生点下 Preview 与 UE 的玩家位置、区块数、section 数、方块样本一致；渲染差异有解释。
 - 线程：20 TPS 稳定；FPS 在 30–144 波动时 tick 不受影响；GT Bridge 在预算内。
 - 无 JVM：UE/Preview 进程与命令行无 Java/classpath；DLL 无 JVM 依赖。
-- Shipping：干净机（无 UE/JDK/MSVC/CMake）可启动、进入世界、移动、退出；日志可定位。
-- Converter：manifest/data v2 可重复；`package`/`assemble` 产出 NativeVersion/NativeBuild；篡改/不匹配被拒绝。
-- NativeBuild：UE 只从工具链产出的 NativeBuild 启动；手工替换 DLL/Adapter、绕过 manifest 必须失败。
+- Shipping：干净机（无 UE/JDK/MSVC/CMake）在 DX12/SM6 下可启动、进入世界、移动、退出；日志可定位。
+- Converter：manifest/data v2 可重复；`package`/`assemble` 产出 NativeVersion/NativeBuild；缺失/版本/哈希不一致被拒绝。
+- NativeBuild：UE 只从工具链产出的 NativeBuild 启动；版本/哈希不一致、缺文件、错 Adapter 必须失败；M2 不宣称防篡改。
 - 单实现：UE 源码中没有存档/NBT/网格/物理/方块表实现；Renderer 只消费 Contract；UE 渲染是 Native Adapter，没有 Java 渲染翻译/命令回放。
 
 ### 11.3 验收命令与记录
@@ -871,13 +923,17 @@ build\m2\native-build\26.3\REIMRuntime\REIMRuntime.exe ^
 
 | 风险 | 影响 | 缓解 |
 |---|---|---|
-| UE 5.8.4 未安装/版本不符 | M2 无法开始 | A1 硬前置；记录路径/版本；不用其他引擎版本替代 |
+| UE 5.8.4 未安装/版本不符 | M2 无法开始 | A1 硬前置；只在指定开发机执行；记录路径/版本；不用其他引擎版本替代 |
 | UE 构建/打包耗时长 | 会话上下文与迭代速度 | 会话拆分；增量构建；BuildCookRun 脚本化；不在 Editor 里手工重复操作 |
-| 自定义 VertexFactory/材质集成复杂 | R0 卡住 | 允许 R0 退化为 `FLocalVertexFactory` + 烘焙顶点色，Contract 不变并记录；R1 恢复 |
-| GT→RT 帧所有权/释放错误 | 悬垂/泄漏/崩溃 | host-owned blob + `release_frame` + 4 块上限 + NullRHI/泄漏测试 |
+| 自定义 VertexFactory/材质集成复杂 | R0 卡住 | C0 先做 VF/材质 spike；自定义属性走 VertexColor/UV/自定义 expression+HLSL；允许退化为 `FLocalVertexFactory` + 预烘焙属性，Contract 不变并记录；R1 恢复 |
+| GT fetch 持锁/复制阻塞模拟 | 20 TPS 抖动 | 锁内只交换、锁外分配/复制；pending 有界；G3 预算与首载单独统计 |
+| GT→RT 帧所有权/释放错误 | 悬垂/泄漏/崩溃 | host-owned blob + `release_frame`（可乱序）+ 4 块上限 + NullRHI/泄漏测试 |
+| 全量重同步缺失 | device lost/重建后黑屏或旧网格 | `request_full_snapshot` + `snapshot_generation`；G5 Automation 覆盖 |
+| package/assemble hash 不可重复 | E7 失败 | canonical hash（排除时间戳/路径）+ 确定性构建选项；差异逐项解释 |
+| 版本校验无信任根 | 误以为可防篡改 | 明确 M2 威胁模型是误用/漂移；签名/信任根留 M4 |
 | Shipping 中 DLL 加载失败/路径劫持 | 干净机失败/安全问题 | NativeVersion 布局 + 绝对路径 `LoadLibraryExW` + 受限搜索 + hash/ABI 校验 |
 | VC++ 运行库缺失 | 干净机启动失败 | app-local 运行库；`dumpbin /dependents`；F5 实测 |
-| 干净机/VM 无法用 DX12 | Shipping 验收阻塞 | 物理机或 GPU 直通；DX12 主验收，DX11 冒烟记录；不把 VM 软件 RHI 当通过 |
+| 干净机/VM 无法用 DX12 | Shipping 验收阻塞 | 物理机或 GPU 直通；DX12/SM6 是唯一验收路径，不提供 DX11 回退；不把 VM 软件 RHI 当通过 |
 | UE 侧混入游戏逻辑 | 两套实现/返工 | Bridge/Renderer 边界；G6 扫描与评审；Contract 只读 |
 | 坐标/绕序/FOV 转换错误 | 画面翻转/视角不对 | 集中转换函数 + 单测 + 已知地标截图 + 背面剔除检查 |
 | 图集/纹理格式/采样错误 | 方块花屏/偏色 | `get_asset` 元数据校验；RGBA8 通道交换测试；nearest/无 mip 与 M1 对齐 |
@@ -886,7 +942,7 @@ build\m2\native-build\26.3\REIMRuntime\REIMRuntime.exe ^
 | Converter v2 与 M1 数据不兼容 | Preview 回归失败 | E2 保持 schema 可并存/升级测试；双后端回归 |
 | `.uasset/.umap` 入库/合并问题 | 工程损坏/仓库膨胀 | Git LFS；仅必要资产；避免多人同时改二进制 |
 | Shipping 包误分发 Mojang 资产 | 法律风险 | 包内不含 `generated/`/存档/Mojang 文件；M2 仅内部验收；发布前评审 |
-| Converter 与 UE 手工拼装，NativeBuild 不可复现 | “原生 MC”不在工具链里，版本漂移 | `package/assemble` 组合 + `ue_adapter.json`/`native_version.json`/`native_build.json` hash + 手工拼装拒绝 |
+| Converter 与 UE 手工拼装，NativeBuild 不可复现 | “原生 MC”不在工具链里，版本漂移 | `package/assemble` 组合 + `ue_adapter.json`/`native_version.json`/`native_build.json` hash + 不一致组合拒绝；M2 只防误用/漂移，不防篡改 |
 | UE Adapter/Contract/Runtime 版本漂移 | 加载错配/画面异常 | Adapter/UE/ABI/profile 绑定；启动校验；不匹配明确失败 |
 | 把 Java 渲染逻辑翻译成 UE / 第二套渲染实现 | 范围失控/行为分叉 | 明确 Native Adapter（G 路线）；不做命令回放；G6 扫描与评审 |
 | 性能不达标 | 体验差/阻塞 M3 | 距离 6 起步；GT/RT 预算；先测再优化；必要时先做可见性/批处理 |
@@ -913,15 +969,16 @@ build\m2\native-build\26.3\REIMRuntime\REIMRuntime.exe ^
 - 不手改 `generated/`；不提交 Mojang 文件/世界/生成物/Shipping 包。
 - UE 渲染是 Native Adapter；最终验收只认 Converter 产出的 NativeBuild，不得手工拼装 DLL/UE 工程；不把 Java 渲染翻译成 UE。
 - C ABI 只用于 Runtime Host ↔ Native DLL；UE 不反向控制世界。
-- 所有文件使用 Windows 绝对路径（如 `D:\EngineeringDocuments\REIM-Launcher\...`）。
+- 所有文件使用 Windows 绝对路径；示例路径以 M2 指定开发机为准，其他机器用 `<REIM_ROOT>` 替换。
+- 项目定位 DX12/SM6；M2 不验收 DX11，也不提供 DX11 回退。
+- M2 的 UE 构建/运行只在指定开发机执行；其他机器缺 UE 时停止 UE 工作，不得用替代引擎或假截图。
 - 未实际运行的结果不写成通过；干净机/长时 soak 未执行就标“未运行/豁免”。
-- 未安装 UE 时停止 UE 工作并询问，不得用替代引擎或假截图。
 
 **第一步**
 
-1. 确认 UE 5.8.4 环境（已实测可构建）；确认存档、`generated/26.3`、干净验收机是否可用；
+1. 确认 M2 指定开发机的 UE 5.8.4 环境（已实测可构建）；确认存档、`generated/26.3`、干净验收机是否可用；其他机器缺 UE 时停止 UE 工作；
 2. 检查 M1 ABI v1 现状：`runtime/contract/reim_abi.h`、`reim_render.h`、`runtime_instance.cpp`；确认 Converter 是否已有 `package`/`assemble`/Adapter pin 设计（M2-E）；
-3. 按 §14 选择会话：S1 = M2-A + M2-B + M2-C；S2 = M2-D + M2-G1 + M2-E；S3 = M2-F + M2-G 余项 + M2-H；
+3. 按 §14 选择会话：S1 = M2-A + M2-B + M2-C + F1a（A4 dev）；S2 = A4b + M2-D + M2-G1 + M2-E（用 F1a）；S3 = M2-F1b + M2-G 余项 + M2-H；
 4. 从对应工作包开始，不跨区间抢做后续内容。
 
 **结束条件**
@@ -939,15 +996,15 @@ build\m2\native-build\26.3\REIMRuntime\REIMRuntime.exe ^
 
 | 会话 | 工作包 | 估算 AI 时长 | 开始条件 | 结束交付 |
 |---|---|---|---|---|
-| **S1 基础 + R0 渲染** | M2-A + M2-B + M2-C | 22–38 小时 | UE 5.8.4、M1 构建可用 | UE 工程/ABI v2/Bridge；R0 真实地形/图集/光照/雾；Preview v2；R0 截图 |
-| **S2 Host + Converter UE 集成** | M2-D + M2-G1 + M2-E | 16–28 小时 | S1 | 第一人称输入/菜单/加载；`package`/`assemble`；NativeVersion/NativeBuild；双后端状态对照 |
-| **S3 Shipping + 回归 + 验收** | M2-F + M2-G（余项）+ M2-H | 12–22 小时 | S2；干净机可用 | NativeBuild Shipping；干净机记录；性能/JVM/错误路径报告；`M2_ACCEPTANCE.md`；G2 结论 |
+| **S1 基础 + R0 渲染** | M2-A + M2-B + M2-C + F1a（A4 dev） | 22–38 小时 | M2 指定开发机 UE 5.8.4、M1 构建可用 | UE 工程/ABI v2/Bridge；R0 真实地形/图集/光照/雾；Preview v2；R0 截图；F1a Development 包/Adapter 描述 |
+| **S2 Host + Converter UE 集成** | A4b + M2-D + M2-G1 + M2-E | 16–28 小时 | S1（含 F1a） | 切 NativeBuild；第一人称输入/菜单/加载；用 F1a 完成 `package`/`assemble`；Development NativeBuild；双后端状态对照 |
+| **S3 Shipping + 回归 + 验收** | M2-F1b + M2-G（余项）+ M2-H | 12–22 小时 | S2；干净机可用 | F1b Shipping NativeBuild；干净机记录；性能/JVM/错误路径报告；`M2_ACCEPTANCE.md`；G2 结论 |
 
 **为什么是 3 个**
 
-- S1 把“UE 工程 → ABI/Bridge → R0 Renderer”放在同一会话，第一次把 Contract/帧块/渲染闭环，减少跨会话契约反复。
+- S1 把“UE 工程 → ABI/Bridge → R0 Renderer”放在同一会话，第一次把 Contract/帧块/渲染闭环，减少跨会话契约反复；S1 内同时产出 F1a Development 包与 Adapter 描述，供 S2 的 E4/E5 使用。
 - S2 把 Host 与 Converter UE 集成放在一起：输入/生命周期与 NativeBuild 启动/校验是同一个运行闭环；G1 双后端也在此完成。
-- S3 把 Shipping、回归和验收放在最后，避免验收发现问题再跨会话往返。
+- S3 用 F1b Shipping 包做最终打包、干净机和验收，避免验收发现问题再跨会话往返。
 - 合并后单会话更长：每个工作包（A/B/C 等）结束时都按 §14.2 留交接状态；上下文告急时在本会话内切分，不改变计划编号。
 - 若 S1 的 VF 集成严重阻塞，优先按 C3/§8.3 的降级方案继续，不新开会话重做。
 
@@ -958,7 +1015,8 @@ build\m2\native-build\26.3\REIMRuntime\REIMRuntime.exe ^
 先读 §14.3 的交接状态和上一次交付；只读本区间相关代码。
 允许构建/运行/快速冒烟并自行修复；不要扩展到其他 Sx 的工作包。
 合并会话较长：每完成一个工作包就更新 §14.3，不要攒到最后。
-未安装 UE 时停止 UE 工作并报告；不要用替代引擎或假截图。
+UE 工作只在 M2 指定开发机执行；未安装 UE 时停止 UE 工作并报告，不要用替代引擎或假截图。
+项目定位 DX12/SM6；不要引入 DX11 回退。
 未实际运行的结果不要写成通过。
 ```
 
@@ -974,9 +1032,9 @@ build\m2\native-build\26.3\REIMRuntime\REIMRuntime.exe ^
 
 | 会话 | 状态 | 已完成 | 已知问题 / 下一步 |
 |---|---|---|---|
-| S1 基础 + R0 渲染 | 未开始 | 环境已验证：UE 5.8.4、MSVC 14.44、NetFxSDK 4.8.1、DDC=`D:\UE-DDC` | 先冻结 ABI v2（帧块/插值/资产），再写 Renderer；C1–C3 先打通一个 section；干净机待确认 |
-| S2 Host + Converter UE 集成 | 未开始 | — | 依赖 S1；输入只走 ABI；先冻结 adapter/native_version schema，再 `package`/`assemble`；G1 用 NativeBuild |
-| S3 Shipping + 回归 + 验收 | 未开始 | — | 依赖 S2；干净机由用户提供；NativeBuild 不得手工拼装；按 ROADMAP M2 七条 + M2 执行补充 + G2 写实测 |
+| S1 基础 + R0 渲染 | 未开始 | M2 指定开发机环境已验证：UE 5.8.4、MSVC 14.44、NetFxSDK 4.8.1、DDC=`D:\UE-DDC` | 先冻结 ABI v2（帧块/插值/资产/全量快照），再写 Renderer；C0 先做 VF/材质 spike，C1–C3 先打通一个 section；S1 内产出 F1a Development 包/Adapter 描述；干净机待确认 |
+| S2 Host + Converter UE 集成 | 未开始 | — | 依赖 S1（含 F1a）；先做 A4b 切 NativeBuild；输入只走 ABI；先冻结 adapter/native_version schema，用 F1a 完成 `package`/`assemble`；G1 用 Development NativeBuild |
+| S3 Shipping + 回归 + 验收 | 未开始 | — | 依赖 S2；用 F1b Shipping 包重跑 assemble；干净机由用户提供；按 ROADMAP M2 七条 + M2 执行补充 + G2 写实测 |
 
 **状态写法**：`未开始` → `进行中` → `完成`；若阻塞写 `阻塞：<原因>`。只更新本表，不在这里写长篇总结。
 
@@ -984,8 +1042,8 @@ build\m2\native-build\26.3\REIMRuntime\REIMRuntime.exe ^
 
 | 会话 | 只允许 | 明确不做 |
 |---|---|---|
-| S1 | M2-A/B/C：UE 工程、打包骨架、ABI v2、Bridge、R0 Renderer、Preview v2 | 输入/菜单、Converter UE 集成、Shipping 验收 |
-| S2 | M2-D/E/G1：输入/UI/生命周期、UE Adapter pin、`package`/`assemble`、双后端对照 | 新渲染功能、Shipping 打包/干净机、验收记录 |
-| S3 | M2-F/G余/H：Shipping、干净机、性能/错误路径、验收 | 新功能、Converter 范围扩张、重构 |
+| S1 | M2-A/B/C + F1a：UE 工程、Development Runtime 包、Adapter 描述、ABI v2、Bridge、R0 Renderer、Preview v2；A4 只做 dev 布局 | 输入/菜单、Converter UE 集成（E）、A4b NativeBuild 校验、F1b Shipping、干净机验收 |
+| S2 | A4b + M2-D/E/G1：切 NativeBuild、输入/UI/生命周期、用 F1a 做 `package`/`assemble`、双后端对照 | 新渲染功能、F1b Shipping/干净机、验收记录 |
+| S3 | M2-F1b/G余/H：Shipping、干净机、性能/错误路径、验收 | 新功能、Converter 范围扩张、重构 |
 
 **交接原则**：ABI v2（`reim_abi.h`、`reim_render.h`）、坐标/单位、线程/所有权、manifest v2、`ue_adapter.json`/`native_version.json`/`native_build.json` schema 在 S1/S2 冻结（S1 冻结 Contract；S2 冻结 Adapter/NativeVersion）；后续会话只实现/修复，不重新设计。若必须改，先在本表记录原因，再同时改文档、头文件、Converter、Preview 与 UE。

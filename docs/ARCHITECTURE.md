@@ -59,7 +59,7 @@ REIM 是一个 **Minecraft Native Launcher**，同时包含一条 **Minecraft �
 | D-16 | 存档 | 原生读写 26.3；旧存档默认走官方离线升级；首版不做完整 DFU 移植 |
 | D-17 | 法律与资产 | 用户自有 JAR 作为输入；不随产品分发 Mojang 代码/资产；官方预编译 Native Runtime 属于高风险分发项，发布前必须法律评审 |
 | D-18 | 构建 | Launcher/Converter/游戏 DLL 用 CMake；UE Runtime 用 UBT + BuildCookRun/Shipping；**C ABI 只用于 Runtime Host ↔ Native DLL**，不是 Launcher/Converter 的通用协议 |
-| D-19 | UE 用户环境 | 用户不安装 UE/Editor；Runtime 自包含；VC++ 运行库 app-local 或预置安装；DX11 最低/DX12 推荐；Windows 10/11 x64 |
+| D-19 | UE 用户环境 | 用户不安装 UE/Editor；Runtime 自包含；VC++ 运行库 app-local 或预置安装；**DX12/SM6 为唯一目标，DX11 不支持/不验收**；Windows 10/11 x64 |
 | D-20 | **用户构建路径** | **默认产品路径是官方预编译 Native Runtime**；本地 Native 化/编译属于 Developer/Research Mode，需要 JDK/MSVC/CMake，不是普通用户必需 |
 | D-21 | **JRT 定位** | JRT 是 Native 化过程中的兼容/迁移基础设施，**不是长期要模拟的完整 JVM**；只有无法直接 Native 化的 Java 语义才使用，且应逐步缩小 |
 | D-22 | 验收 | 原版是规格；Native 化与渲染都必须通过差分测试/截图对比；P0 按子系统设置“翻译/生成/手写”选型门禁；干净机 Native Runtime 启动是发布门禁 |
@@ -331,12 +331,12 @@ Unreal Engine 是 REIM 的**开发、编译、Cook、Package 和 Runtime 基础*
 - `mc_<version>.dll`（C++ 游戏逻辑）与 manifest；
 - 必要的配置、图标、许可证/声明；
 - 运行库：**Microsoft Visual C++ 2015–2022 x64 Redistributable** 的 app-local 副本或预置安装器（Project Settings → Packaging → Prerequisites）；
-- 若使用旧版 DirectX 组件，按需附带 DirectX End-User Runtime；现代 DX11/DX12 项目通常不需要单独安装。
+- 若使用旧版 DirectX 组件，按需附带 DirectX End-User Runtime；现代 DX12 项目通常不需要单独安装。
 
 **用户环境要求（运行时）**
 
 - Windows 10/11 x64（首发）；
-- 支持 DX11 的 GPU/驱动为最低，DX12 + SM6 推荐；若启用 Nanite/Lumen 等增强特性，需要 DX12/SM6 和支持的 GPU；
+- 支持 DX12/SM6 的 GPU/驱动为要求；DX11 不在支持范围；若启用 Nanite/Lumen 等增强特性，同样需要 DX12/SM6 和支持的 GPU；
 - VC++ 运行库（app-local 或系统已安装）；
 - 不需要 UE、Editor、UBT、源码、插件市场或任何 Unreal 安装。
 

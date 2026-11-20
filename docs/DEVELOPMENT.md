@@ -118,7 +118,7 @@ Minecraft Reimagined Launcher/
 
 - 不安装 UE/Editor/JDK/MSVC；
 - VC++ 2015–2022 x64 运行库（app-local 或预置）；
-- DX11 最低/DX12 推荐；Windows 10/11 x64；
+- DX12/SM6 为唯一目标，DX11 不支持/不验收；Windows 10/11 x64；
 - 正常 GPU 驱动。
 
 ---

@@ -110,7 +110,7 @@ REIM 是 **Minecraft Native Launcher**，不是 Java Edition Launcher。Java Edi
 | 输入 | Enhanced Input + 原始输入 | GT 采集，转发客户端模拟线程 |
 | 纹理 | `UTexture2D::CreateTransient`/纹理数组 | 资源包运行时上传 |
 | 资产 | Cooked pak/IoStore + 用户资源缓存 | 不依赖 Editor 导入 |
-| 平台 | Windows 10/11 x64 | DX11 最低/DX12 推荐 |
+| 平台 | Windows 10/11 x64 | DX12/SM6 唯一目标；DX11 不支持/不验收 |
 | 测试 | UE Automation + Catch2 | 集成/渲染/性能 |
 
 **UE 侧模块**
@@ -186,8 +186,8 @@ RunUAT.bat BuildCookRun ^
 |---|---|---|
 | Unreal Engine / Editor | **否** | 不安装、不随包提供 |
 | Microsoft Visual C++ 2015–2022 x64 Redistributable | **是** | Project Settings → Packaging → Prerequisites：**app-local** 副本或预置安装器 |
-| DirectX End-User Runtime（旧版 D3DX/XAudio/XInput） | 按需 | 现代 DX11/DX12 项目通常不需要；若使用旧组件再附带 |
-| GPU 驱动 | 是 | 用户自备；DX11 最低/DX12 推荐 |
+| DirectX End-User Runtime（旧版 D3DX/XAudio/XInput） | 按需 | 现代 DX12 项目通常不需要；若使用旧组件再附带 |
+| GPU 驱动 | 是 | 用户自备；DX12/SM6 唯一目标；DX11 不验收 |
 | .NET | 运行时不要求 | UE 工具链在开发/CI 侧需要；发布包不应依赖 .NET 工具 |
 | Windows | Windows 10/11 x64 | 首发矩阵 |
 
