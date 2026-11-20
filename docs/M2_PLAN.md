@@ -170,6 +170,7 @@ roll_ue  = 0
 ### 3.1 开发机提供
 
 - **Unreal Engine 5.8.4**（Epic 官方安装版即可，必须包含 UBT/RunUAT/Editor）；记录实际安装根目录与版本。安装最小集：Engine 核心 + Windows 平台；Editor symbols 可选；不需要 Starter Content/Templates/Engine Source/多平台。
+- 环境基线：`UE_ROOT` 指向 UE 5.8.4；`UE-LocalDataCachePath=D:\UE-DDC`（避免 C: 被 DDC/Shader 缓存占满）；干净机另行确认。
 - Visual Studio 2022（C++ 游戏开发工作负载）、MSVC 14.50、Windows SDK 10.0.26100。
 - CMake 3.28+、Git、Git LFS、Python 3.12、JDK 25（仅 Converter/oracle）。
 - 磁盘：UE 安装 + 工程 + 打包产物建议预留 150 GB；内存 32 GB 推荐。
@@ -178,12 +179,16 @@ roll_ue  = 0
 - UE Adapter 构建产物（`runtime/host` 的 UBT 构建/打包结果）与可 pin 的 adapter 版本信息；Converter 不生成该产物。
 - **干净验收机**：Windows 10/11 x64，未安装 UE/Editor/JDK/MSVC/CMake/VS；有可用 DX12 GPU/驱动；或使用带 GPU 直通/独立显卡的物理机/VM。
 
-### 3.2 当前环境检查（2026-11-19）
+### 3.2 当前环境检查（2026-11-20 实测）
 
-- 开发机已有 M1 的 CMake/MSVC/JDK/Python 与 `generated/26.3`。
-- 未发现 UE 5.8.4 安装（常见路径均无 `Engine/Build/BatchFiles`）。
-- **因此 S1 的 UE 部分处于前置阻塞**；在 UE 安装并验证前，只允许做不依赖 UE 的 ABI v2/Preview/Converter 准备，不得伪造 UE 构建或截图。
+- UE 5.8.4 已安装：`D:\Program Files\Epic Games\UE_5.8`；`Build.version` = 5.8.4；UBT/RunUAT/UnrealPak/UnrealInsights/UnrealEditor-Cmd 均存在；`RunUAT -help` 退出码 0。
+- 用最小 C++ 工程实际构建 `EnvCheckEditor Win64 Development` **成功**；使用 MSVC 14.44.35207 + Windows SDK 10.0.26100.0。工程位于 `build/envcheck`（gitignore，不提交）。
+- .NET Framework 4.8.1 Developer Pack 已安装（NetFxSDK 4.8.1）；这是 UE Editor 构建的前置，缺失时 UBT 会报 `Could not find NetFxSDK install dir`。
+- 用户环境变量：`UE_ROOT=D:\Program Files\Epic Games\UE_5.8`，`UE-LocalDataCachePath=D:\UE-DDC`（原先被误设为字面量 `-LocalDataCachePath`，已修正）。
+- 开发机已有 M1 的 CMake 4.4.4/MSVC/JDK 25/Python 3.12/Git LFS 与 `generated/26.3`。
+- `generated/26.3`、26.3 存档、26.3 版本文件存在；GPU RTX 4060；D: 剩余约 225 GB，C: 约 50 GB。
 - 干净验收机尚未确认；S3 之前必须由用户提供并记录。
+- 仍建议在每个 UE 构建/运行脚本中显式设置 `UE-LocalDataCachePath=D:\UE-DDC`，避免新终端未继承用户变量。
 
 ### 3.3 缺失处理
 
@@ -724,11 +729,13 @@ reim-convert assemble --native-version build/native-version/26.3 ^
 
 ```bat
 cd /d D:\EngineeringDocuments\REIM-Launcher
+set UE_ROOT=D:\Program Files\Epic Games\UE_5.8
+set UE-LocalDataCachePath=D:\UE-DDC
 cmake --preset m2-release
 cmake --build --preset m2-release --parallel 8
 
 :: UE 编辑器工程生成/构建（路径按实际 UE 5.8.4 安装）
-"C:\Program Files\Epic Games\UE_5.8\Engine\Build\BatchFiles\Build.bat" ^
+"%UE_ROOT%\Engine\Build\BatchFiles\Build.bat" ^
   REIMEditor Win64 Development ^
   -project="D:\EngineeringDocuments\REIM-Launcher\runtime\host\REIM.uproject" ^
   -waitmutex
@@ -737,7 +744,9 @@ cmake --build --preset m2-release --parallel 8
 ### 10.2 Shipping 打包
 
 ```bat
-"C:\Program Files\Epic Games\UE_5.8\Engine\Build\BatchFiles\RunUAT.bat" BuildCookRun ^
+set UE_ROOT=D:\Program Files\Epic Games\UE_5.8
+set UE-LocalDataCachePath=D:\UE-DDC
+"%UE_ROOT%\Engine\Build\BatchFiles\RunUAT.bat" BuildCookRun ^
   -project="D:\EngineeringDocuments\REIM-Launcher\runtime\host\REIM.uproject" ^
   -noP4 -platform=Win64 -clientconfig=Shipping ^
   -build -cook -stage -pak -archive ^
@@ -910,7 +919,7 @@ build\m2\native-build\26.3\REIMRuntime\REIMRuntime.exe ^
 
 **第一步**
 
-1. 确认 UE 5.8.4 安装路径与版本；确认存档、`generated/26.3`、干净验收机是否可用；
+1. 确认 UE 5.8.4 环境（已实测可构建）；确认存档、`generated/26.3`、干净验收机是否可用；
 2. 检查 M1 ABI v1 现状：`runtime/contract/reim_abi.h`、`reim_render.h`、`runtime_instance.cpp`；确认 Converter 是否已有 `package`/`assemble`/Adapter pin 设计（M2-E）；
 3. 按 §14 选择会话：S1 = M2-A + M2-B + M2-C；S2 = M2-D + M2-G1 + M2-E；S3 = M2-F + M2-G 余项 + M2-H；
 4. 从对应工作包开始，不跨区间抢做后续内容。
@@ -965,7 +974,7 @@ build\m2\native-build\26.3\REIMRuntime\REIMRuntime.exe ^
 
 | 会话 | 状态 | 已完成 | 已知问题 / 下一步 |
 |---|---|---|---|
-| S1 基础 + R0 渲染 | 未开始 | — | 前置：安装 UE 5.8.4；先冻结 ABI v2（帧块/插值/资产），再写 Renderer；C1–C3 先打通一个 section |
+| S1 基础 + R0 渲染 | 未开始 | 环境已验证：UE 5.8.4、MSVC 14.44、NetFxSDK 4.8.1、DDC=`D:\UE-DDC` | 先冻结 ABI v2（帧块/插值/资产），再写 Renderer；C1–C3 先打通一个 section；干净机待确认 |
 | S2 Host + Converter UE 集成 | 未开始 | — | 依赖 S1；输入只走 ABI；先冻结 adapter/native_version schema，再 `package`/`assemble`；G1 用 NativeBuild |
 | S3 Shipping + 回归 + 验收 | 未开始 | — | 依赖 S2；干净机由用户提供；NativeBuild 不得手工拼装；按 ROADMAP M2 七条 + M2 执行补充 + G2 写实测 |
 
