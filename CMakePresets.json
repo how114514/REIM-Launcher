@@ -49,6 +49,28 @@
         "CMAKE_CONFIGURATION_TYPES": "Debug;Release",
         "REIM_BUILD_TESTS": "ON"
       }
+    },
+    {
+      "name": "m3-debug",
+      "displayName": "M3 Debug (MSVC x64, ABI v3)",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/build/m3",
+      "cacheVariables": {
+        "CMAKE_CONFIGURATION_TYPES": "Debug;Release",
+        "REIM_BUILD_TESTS": "ON"
+      }
+    },
+    {
+      "name": "m3-release",
+      "displayName": "M3 Release (MSVC x64, ABI v3)",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/build/m3",
+      "cacheVariables": {
+        "CMAKE_CONFIGURATION_TYPES": "Debug;Release",
+        "REIM_BUILD_TESTS": "ON"
+      }
     }
   ],
   "buildPresets": [
@@ -70,6 +92,16 @@
     {
       "name": "m2-release",
       "configurePreset": "m2-release",
+      "configuration": "Release"
+    },
+    {
+      "name": "m3-debug",
+      "configurePreset": "m3-debug",
+      "configuration": "Debug"
+    },
+    {
+      "name": "m3-release",
+      "configurePreset": "m3-release",
       "configuration": "Release"
     }
   ],
@@ -101,6 +133,22 @@
     {
       "name": "m2-release",
       "configurePreset": "m2-release",
+      "configuration": "Release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "m3-debug",
+      "configurePreset": "m3-debug",
+      "configuration": "Debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "m3-release",
+      "configurePreset": "m3-release",
       "configuration": "Release",
       "output": {
         "outputOnFailure": true

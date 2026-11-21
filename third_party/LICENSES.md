@@ -11,6 +11,7 @@ installed system-wide and the build does not use the network.
 | stb_image_write | `nothings/stb` master snapshot (2026-11-19) | MIT / public domain | `a8e7f77f0ccfdc9bac09a71268b131931ff81aafca82c393aeb6aaba10d9e7ca` |
 | Catch2 | v2.13.10 single header | BSL-1.0 | `3725c0f0a75f376a5005dde31ead0feb8f7da7507644c201b814443de8355170` |
 | miniz | `richgel999/miniz` master snapshot (2026-11-19), split C sources/headers | MIT | files below |
+| LZ4 | v1.9.4 source tarball (`lz4/lz4` tag `v1.9.4`) | BSD-2-Clause | files below |
 
 miniz files:
 
@@ -24,6 +25,19 @@ miniz files:
 - `miniz_tdef.h` `123050e3c876519828d3934899e0b003ad13a98114919d94f1e06b4b9d02a925`
 - `miniz_tinfl.h` `2c89615a4cbc5de4eac5b861051849392ec698264ee7dd399ea587c592cf68d1`
 - `miniz_zip.h` `43d09867f79993a9ba1627cb1f3bbd78d3bf5ee0c91cd6e7527aa9ca1e3aed44`
+
+LZ4 files (tarball SHA-256 `0b0e3aa07c8c063ddf40b082bdf7e37a1562bda40a0ff5272957f3e987e0e54b`):
+
+- `lz4.c` `b6a85fd8f9be0fedb568abd1338719b23b999583ccda6f3404d5ae11e4ce7b8e`
+- `lz4.h` `c1614ecf7ada7b0be1acb560d4239595f96fbb7aa6a79a7c40cb358753830be6`
+- `lz4hc.c` `bca2cf3a014b21919da4fa92db5adbfbfc9aee2f0938107885a3a8f49a750aa8`
+- `lz4hc.h` `6bc1efeb79571807da2ca084809de1760e0cd87064e40eccf9624d95088dce7d`
+- `lz4frame.c` `80812286293760e032b254fb1c5bfd03ed099879dbecf1503286c0bb3c342574`
+- `lz4frame.h` `47501e4925d60c0f87c7bfc68c8b9e0e4d942eea786e35d2c5bfbf5e9deab561`
+- `lz4frame_static.h` `31ab72a6e97e4fa0bedd4420d24a3f1f8024cbfa1d8ffad88c87cbb4e04f769d`
+- `xxhash.c` `7ae8273e2eae674db237c4d0c300e4a69bff8832b0e5b4e08552255fde006fa2`
+- `xxhash.h` `aefdd236f35130495c18764cabed3f7b216906855fc5e6a9025cd2040bc84444`
+- `LICENSE` (BSD-2-Clause)
 
 ## S1 deviations from docs/M1_PLAN.md A3
 

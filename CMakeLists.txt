@@ -41,6 +41,16 @@ target_include_directories(reim_thirdparty PUBLIC
 )
 target_compile_definitions(reim_thirdparty PRIVATE MINIZ_NO_STDIO)
 
+# LZ4 1.9.4 (BSD-2-Clause) is vendored for 26.3 Anvil LZ4 region chunks.
+# M3-B wires the reader/writer to this target; it stays off the UE side.
+add_library(reim_lz4 STATIC
+  "${REIM_THIRD_PARTY}/lz4/lz4.c"
+  "${REIM_THIRD_PARTY}/lz4/lz4hc.c"
+  "${REIM_THIRD_PARTY}/lz4/lz4frame.c"
+  "${REIM_THIRD_PARTY}/lz4/xxhash.c"
+)
+target_include_directories(reim_lz4 PUBLIC "${REIM_THIRD_PARTY}/lz4")
+
 # GLFW 3.4 is unpacked from the pinned tarball into the build cache, never
 # installed system-wide.
 set(REIM_GLFW_DEST "${CMAKE_BINARY_DIR}/third_party")

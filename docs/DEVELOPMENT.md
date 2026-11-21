@@ -79,7 +79,7 @@ Minecraft Reimagined Launcher/
 | Windows | 10/11 x64 | 全部阶段 | 首发平台 |
 | Git | 最新 | M1 | 版本管理 |
 | CMake | 3.28+ | M1 | Runtime / Converter / 临时 Renderer 构建 |
-| MSVC + Windows SDK | MSVC 14.50、Windows SDK 10.0.26100 | M1 | C++ 编译。**只装 VS 2022 Build Tools，不装 Visual Studio IDE** |
+| MSVC + Windows SDK | MSVC 14.44.35207、Windows SDK 10.0.26100 | M1 | C++ 编译。**只装 VS 2022 Build Tools，不装 Visual Studio IDE**（M2/M3 实测版本） |
 | JDK | 25（Temurin） | M1 | Converter 分析/数据生成/差分 oracle；仅离线使用 |
 | Python | 3.12 | M1 | 脚本/差分/报告 |
 | Unreal Engine | 5.8.4 | M2 | UE Host/Renderer、Cook/Package；M1 不需要 |

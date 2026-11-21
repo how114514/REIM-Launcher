@@ -66,15 +66,17 @@
 **容器**
 
 - Anvil `.mca`：32×32 区块、8 KiB 头、4 KiB sector；
+- 26.3 维度布局：`dimensions/<namespace>/<dimension>/region/r.x.z.mca`（不再假设顶层 `region/`）；
 - 压缩 ID：1 gzip / 2 zlib / 3 none / 4 LZ4；超大区块 `.mcc`；
-- 独立 entities/POI region；`level.dat`、`playerdata/`、`data/`、worldgen 数据。
+- `level.dat`（spawn/time/version）+ `data/minecraft/*.dat`（weather、world_clocks、world_gen_settings、game_rules 等）+ `players/data/<uuid>.dat` + `dimensions/<dim>/data/minecraft/*.dat`（chunk_tickets/raids/world_border）；实体/POI 的实际存放位置以 26.3 实档审计为准。
 
 **规则**
 
 - 26.3/5023 原生读写；旧版本默认用官方 26.3 服务端 `--forceUpgrade` 离线升级，再导入。
 - 不降级写入：读取到高于当前 DataVersion 的存档时拒绝写入并提示。
-- 原子/sector 安全写、临时文件/备份、`session.lock`、后台保存、崩溃恢复。
-- 未知 NBT compound/list 保留；读写限制（深度/长度/数组）防恶意存档。
+- 原子/sector 安全写、临时文件/备份、`session.lock`、后台保存、崩溃恢复；多文件保存用 journal/marker 明确提交顺序。
+- 未知 NBT compound/list 保留；未知 item components 必须保留原始 NBT，不能只存 hash；读写限制（深度/长度/数组）防恶意存档。
+- 新/改区块维护 `Status=full`、`isLightOn`、heightmaps 等 vanilla 可读字段。
 - 26.x 世界目录/版本历史有迁移；Launcher/存档层按实际版本解析，不硬编码。
 - 验收：C++ 写 → 原版读 → 原版写 → C++ 读；语义 diff（忽略压缩/顺序/sector）。
 
