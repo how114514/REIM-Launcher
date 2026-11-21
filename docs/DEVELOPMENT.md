@@ -25,39 +25,33 @@
 
 ---
 
-## 2. 仓库布局（建议）
+## 2. 仓库布局与目录分类
+
+> 完整分类、逐目录清单、入库规则与规划目录见 `docs/STRUCTURE.md`；本节只给顶层视图。
 
 ```text
-Minecraft Reimagined Launcher/
-├─ README.md
-├─ docs/
-│  ├─ ARCHITECTURE.md
-│  ├─ TECH_STACK.md
-│  ├─ ROADMAP.md
-│  ├─ DEVELOPMENT.md
-│  └─ COMPATIBILITY.md
-├─ launcher/                     # Qt/C++ Launcher
-│  ├─ app/                       # UI/导航/设置
-│  ├─ core/                      # Java Edition 输入/Native 版本/实例/账号/Runtime/启动
-│  └─ convert/                   # 原生化任务编排
-├─ converter/
-│  ├─ orchestrator/              # reim-convert.exe
-│  ├─ java-analyzer/             # JDK 25 + ASM/Vineflower 分析/导出
-│  ├─ translate/                 # 选择性翻译/代码生成
-│  ├─ adapters/                  # 库替换/平台/渲染适配
-│  ├─ patches/                   # 按 MC 版本维护的 Patch 集
-│  └─ verify/                    # 差分/截图/报告
+REIM-Launcher/
+├─ README.md / CMakeLists.txt / CMakePresets.json / play-m3.bat
+├─ docs/                     # 正式文档：架构/路线/计划/验收/开发/兼容/目录分类
+├─ conversion-decisions/     # 转换决策审计
+├─ converter/                # Converter/分析/数据/Patch
+│  ├─ orchestrator/          # reim-convert.exe
+│  ├─ java-analyzer/         # JDK 25 类分析
+│  ├─ adapters/ ledger/ patches/ samples/
 ├─ runtime/
-│  ├─ host/                      # UE 5.8.4 工程（REIMRuntime）
-│  ├─ contract/                  # Runtime Host ↔ Native DLL 的 C ABI
-│  ├─ jrt/                       # Java Runtime Support（仅翻译分支）
-│  ├─ mc-native/                 # 手写原生子系统
-│  └─ renderer/                  # UE SceneProxy/材质/Bridge
-├─ generated/                    # Native 化产物（按版本缓存，通常不入库）
-├─ third_party/                  # 固定版本 + 许可清单
-├─ tests/                        # golden/差分/截图/性能/fuzz
-└─ tools/                        # 脚本/编排/报告
+│  ├─ contract/              # C ABI / 快照 / UI / 音频 / 游戏头文件
+│  ├─ mc-native/             # anvil/asset/core/data/game/mesh/nbt/samples/src/ui/util/world
+│  ├─ headless/ preview/ scenario/
+│  └─ host/                  # UE Host：Source/Config/Content/Plugins 入库；
+│                            # Binaries/Intermediate/Saved/DerivedDataCache/Build 不入库
+├─ tests/                    # 单元/场景/fixture
+├─ tools/                    # 验收/差分/打包/审计脚本
+├─ third_party/              # 固定版本 + 许可清单
+├─ generated/ work/ build/ logs/   # 本机产物（不入库）
+└─ versions/ libraries/      # 用户/Mojang 输入（不入库）
 ```
+
+规划中目录（`launcher/`、`converter/translate/`、`runtime/njs/` 等）见 `docs/STRUCTURE.md` §11；不要提前创建空目录。
 
 **边界**
 

@@ -110,7 +110,7 @@ build\m2\bin\m1-tests.exe
 - **Shipping 引擎日志被编译掉**（installed engine 的 `USE_LOGGING_IN_SHIPPING=0`，且无法用 Unique 环境重建）；Shipping 的可定位日志是 Host 侧 `REIM-host.log`。Development 仍有 UE 日志。
 - F5 键位（第三人称）仍未经自动化/人工按键实测；第三人称已用 `-reim-third-person` 命令行实测；加载页未截图。
 - R0 降级为 `FLocalVertexFactory` + 烘焙顶点色（计划允许）；未实现自定义 VertexFactory/材质 Shader 资产。
-- 天空为纯色球体；无太阳/云；水体 alpha 0.72 兜底、按 section 排序，无 OIT。
+- 天空为纯色球体；无太阳/云；水体 alpha 0.72 兜底、按 section 排序，无 OIT。**M3.5 承接**：水渲染缺陷（alpha/排序/动画/水下/waterlogging）在 M35-G1 修复，见 `docs/M3_5_PLAN.md` §1.5。
 - 玩家为灰色盒体调试代理，无皮肤/骨骼；无实体、方块实体、粒子、天气、音频、正式 UI。
 - GPU device lost 未构造用例（由引擎 RHI 处理）；DX11 冒烟沿用 S1 记录，S3 未重跑。
 - 未运行长时间 soak；M1 的 10 分钟 soak 豁免不自动适用于 M2。
@@ -486,7 +486,7 @@ build\native-build\26.3\REIMRuntime\REIMRuntime.exe -reim-instance=<instance.jso
   未做逐像素色彩校准，差异可解释。
 - biome tint 为**单群系固定色**：未实现 3×3 群系插值、swamp 特殊 grass 色变体、干树叶色。
 - 非整方块仅覆盖 ≤2 个 element 的模型（雪层、十字植物、薄盒、部分台阶/活板门）；楼梯/栅栏/门等
-  多 element 或带旋转的模型仍 `skip`。动画纹理/水面动画不承诺。
+  多 element 或带旋转的模型仍 `skip`。动画纹理/水面动画不承诺。**M3.5 承接**：水渲染（含水面动画/流动/排序/waterlogging）在 M35-G1 修复，见 `docs/M3_5_PLAN.md` §1.5。
 - F5 干净机仍未执行（S3 阻塞项不变）。
 - **H6（2026-11-21）**：用户实际运行 Shipping NativeBuild 后“暂时通过”；同时指出画面仍有问题，
   尚未给出逐项清单。后续按用户反馈继续修复，不把“暂时通过”升级为“视觉完全通过”。

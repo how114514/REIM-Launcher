@@ -46,7 +46,7 @@ REIM 是一个 **Minecraft Native Launcher**，不是 Minecraft Java Edition Lau
 |---|---|---|
 | **REIM Launcher** | 桌面应用 | 账号、Minecraft 版本信息、Java Edition 文件检测/准备、Native 化任务、Native 版本/实例/Runtime 管理、启动 Native Runtime、进程监管、日志 |
 | **REIM Converter / Native Toolchain** | 命令行工具链（Developer/Research Mode） | 版本分析、差异、数据导出、代码生成/选择性翻译、Native Adapter、Patch、编译、差分 |
-| **REIM Native Runtime** | **UE Shipping 发布包** | UE 运行时、窗口/输入/音频、Rendering Bridge、Unreal Renderer、加载 `mc_<version>.dll` |
+| **REIM Native Runtime** | **`REIMNative.exe`（M3.5 起）+ UE Shipping 包（可选）** | 原生宿主/窗口/输入/音频/渲染，同一份游戏逻辑（静态链接或 `mc_<version>.dll`）；UE 仅作可选最终表现宿主 |
 
 ## 端到端流程
 
@@ -55,10 +55,11 @@ REIM 是一个 **Minecraft Native Launcher**，不是 Minecraft Java Edition Lau
   ├─ 检测/读取用户自有 Java Edition 文件（不启动）
   │     → 记录为转换输入源
   ├─ User Mode：查找/下载/校验官方 Native Runtime
-  │     或 Developer Mode：本地 Native 化（JDK/MSVC/CMake）
+  │     或 Developer Mode：本地 Native 化（Converter 翻译/生成 + MSVC/CMake）
   └─ 启动 Native Runtime
-        → REIMRuntime.exe（UE Shipping，自包含）
-        → 加载 mc_<version>.dll（C++ 游戏逻辑）
+        → REIMNative.exe（M3.5 起；无 UE/JVM；静态链接同一份游戏逻辑）
+        → 或 REIMRuntime.exe（UE Shipping，可选；加载 mc_<version>.dll）
+        → mc_<version>.dll（C++ 游戏逻辑，供 UE 宿主加载）
         → 20 TPS 模拟 → 不可变快照
         → Rendering Contract → Rendering Bridge → Unreal Renderer
 ```
@@ -79,19 +80,23 @@ R0 **不是**原版 Java 渲染逻辑/OpenGL 绘制命令回放。
 
 > 开发期 M1 允许使用 GLFW/SDL3 + OpenGL 的临时 C++ Renderer 验证真实世界数据；它不属于渲染路线的 R0，不进入发布，且与 UE Renderer 共用同一 C++ Runtime 和 Rendering Contract。
 
+> M3.5 起，功能验收以 `REIMNative.exe` 的原生渲染器（由开发期 Preview 渲染器升级）为准；UE Renderer 仍是可选最终表现宿主，R0 不得回归。
+
 ## 文档索引
 
 | 文档 | 内容 |
 |---|---|
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 产品定位、Native Launcher 边界、UE 分发、总体架构、Native 化路线、Rendering Bridge、版本策略、风险、实测数据 |
 | [docs/TECH_STACK.md](docs/TECH_STACK.md) | Launcher/Converter/Native Runtime 技术选型、UE 打包/Shipping、依赖/许可证 |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | 四阶段路线（M1 C++ Gameplay Preview → UE Native Rendering → 完整游戏 + Converter → Launcher 产品化；Converter 自 M1 启动）、并行轨道、门禁、风险 |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | 五阶段路线（M1 C++ Gameplay Preview → UE Native Rendering → 完整游戏 + Converter → M3.5 原生功能实现 + Java→C++ 转换 → Launcher 产品化；Converter 自 M1 启动）、并行轨道、门禁、风险 |
 | [docs/M1_PLAN.md](docs/M1_PLAN.md) | M1 执行计划：工作包、C ABI/快照、Converter 产物、验收与新对话交接规则 |
 | [docs/M2_PLAN.md](docs/M2_PLAN.md) | M2 执行计划：UE Host/Bridge、Rendering Contract v2、R0 渲染、Converter UE Adapter 集成/NativeBuild、Shipping 干净机验收与交接规则 |
 | [docs/M2_ACCEPTANCE.md](docs/M2_ACCEPTANCE.md) | M2 实测记录（S1 A/B/C、S2 D/E/G1、S3 Shipping/回归/验收；干净机与用户确认未执行，单独标注） |
 | [docs/M3_PLAN.md](docs/M3_PLAN.md) | M3 执行计划：完整单机玩法 + R1/R2 渲染、Contract v3、可写存档/世界生成、Converter 数据规模化/差分/Patch、5 个执行阶段（原 10 个会话两两合并）与 G3 门禁 |
-| [docs/M3_ACCEPTANCE.md](docs/M3_ACCEPTANCE.md) | M3 验收骨架：环境实测、26.3 实档审计、M2 遗留收口、G3 门禁与待用户决定项（当前全部 not_run） |
+| [docs/M3_ACCEPTANCE.md](docs/M3_ACCEPTANCE.md) | M3 实测记录：阶段 1–5 的可执行项与 `not_run`；G3 FAIL 及缺口清单 |
+| [docs/M3_5_PLAN.md](docs/M3_5_PLAN.md) | M3.5 执行计划：原生功能实现 + Java→C++ 转换、Tier A 范围、`REIMNative.exe`、复刻原版菜单/创建世界/物品栏、水渲染修复、翻译/NJS/差分门禁 |
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | 开发环境、仓库布局、构建边界、编码/ABI 规则、测试与发布 |
+| [docs/STRUCTURE.md](docs/STRUCTURE.md) | 仓库目录分类：全部文件夹的类别、入库状态、归属规则与规划目录 |
 | [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) | MC 版本/协议/存档/资源包/Mod/UE 运行环境兼容矩阵 |
 | [docs/ARCHITECTURE.md#附录-e26-3-静态实测2026-11-18](docs/ARCHITECTURE.md#附录-e26-3-静态实测2026-11-18) | 26.3 client.jar + 45 个库的静态普查数据 |
 
@@ -102,6 +107,7 @@ R0 **不是**原版 Java 渲染逻辑/OpenGL 绘制命令回放。
 - UE 基线：**5.8.4**（开发/CI）；用户侧不安装。
 - 已对 26.3 做静态字节码普查（11,383 个类 + 45 个依赖库）。M1（C++ Native Gameplay Preview）已完成并通过用户验收：真实 26.3 存档加载、固定 20 TPS Runtime、OpenGL 预览与自动验收脚本；验收记录、豁免项与已知限制见 [docs/M1_ACCEPTANCE.md](docs/M1_ACCEPTANCE.md)。
 - M2 的 S1–S3 已实施：UE 5.8.4 Host/Bridge、Rendering Contract v2、R0 UE 渲染、Converter NativeVersion/NativeBuild、Shipping 打包与回归脚本。实测见 [docs/M2_ACCEPTANCE.md](docs/M2_ACCEPTANCE.md)：Shipping 60 秒 run 20 TPS、E9/错误矩阵/自动化通过；**干净机验收（F5）与用户画面确认（H6）尚未执行**，M2 整体因此未宣布完成。计划与交接见 [docs/M2_PLAN.md](docs/M2_PLAN.md)。
+- **M3 实测为 G3 FAIL**（见 [docs/M3_ACCEPTANCE.md](docs/M3_ACCEPTANCE.md)）：完成的是演示子集与工具链；存档写入、光照、方块实体、多数生物/世界生成、UE R1/R2/UI/音频未实现。**M3.5** 负责把功能补齐，并以 Java→C++ 转换器产出 `REIMNative.exe`；范围明确包含复刻原版标题画面、世界列表、创建世界、生存/创造物品栏、容器、HUD、选项/死亡/加载，以及修复 M2 水渲染缺陷（0.72 alpha/排序/无动画）；计划见 [docs/M3_5_PLAN.md](docs/M3_5_PLAN.md)。
 
 ## 法律与资产
 
