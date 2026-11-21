@@ -53,4 +53,16 @@ void log_info(std::string_view message);
 void log_warn(std::string_view message);
 void log_error(std::string_view message);
 
+/* Runs an offline tool (JDK data generator / analyzer) and waits for it.
+ * command_line is passed to CreateProcessW without a shell; the first token
+ * must already be quoted by the caller. No Java process is ever started by
+ * the Runtime; this is Converter-only. */
+bool run_process_utf8(const std::string& application, const std::string& command_line,
+                      int& exit_code, std::string& error);
+std::string quote_process_arg(const std::string& value);
+
+/* Rejects absolute paths, drive letters and ".." components. ZIP entry names
+ * and resource-pack paths are untrusted input (M3-I4 security). */
+bool safe_archive_path(const std::string& entry, std::string& error);
+
 } // namespace reim::conv

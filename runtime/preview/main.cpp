@@ -36,10 +36,13 @@
 #include "gl_loader.h"
 #include "gl_renderer.h"
 #include "hud.h"
+#include "ui_canvas.h"
 #include "reim_abi.h"
 #include "render_math.h"
 #include "util/log.h"
 #include "util/png.h"
+
+#include "json.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -63,6 +66,7 @@ struct Options {
   std::string dll;
   std::string screenshot;
   std::string report;
+  std::string scenario;
   std::string check_dll_path;
   std::string check_generated_dir;
   int frames = 0;
@@ -74,6 +78,12 @@ struct Options {
   bool vsync = true;
   bool third_person = false;
   bool show_aabb = false;
+  bool ui_spike = false;
+  bool channel_spike = false;
+  bool open_inventory = false;
+  float ui_scale = 2.0f;
+  float ui_click_x = -1.0f;
+  float ui_click_y = -1.0f;
   double auto_walk_seconds = 0.0;
   uint64_t auto_walk_ticks = 0;
   uint64_t exit_tick = 0;
@@ -116,6 +126,11 @@ void print_usage() {
       "  --no-vsync             disable vsync\n"
       "  --third-person         start in the third-person debug view\n"
       "  --show-aabb            draw the player AABB at start\n"
+      "  --ui-spike             draw the M3-A5 Runtime UI display list\n"
+      "  --channel-spike        show the M3-A6 entity box and play its sound\n"
+      "  --ui-scale N           integer UI layout scale (default 2)\n"
+      "  --ui-click X Y         submit one pointer click at frame pixels once ready\n"
+      "  --open-inventory       press E once ready (screenshot/diagnostic)\n"
       "  --auto-walk SECONDS    hold forward for N seconds once ready (diagnostics)\n"
       "  --auto-walk-ticks N    hold forward for N simulation ticks once ready\n"
       "  --spawn X Y Z          override spawn (diagnostics; same as UE instance)\n"
@@ -123,6 +138,7 @@ void print_usage() {
       "  --spawn-pitch DEG      spawn pitch (with --spawn)\n"
       "  --exit-tick N          exit once the Runtime reaches tick N\n"
       "  --screenshot PATH      write the last frame as PNG\n"
+      "  --scenario PATH        diagnostic scenario JSON (setup/create_world)\n"
       "  --report PATH          write a JSON run summary\n"
       "  --check-dll PATH       validate the DLL ABI without a window\n"
       "  --check-generated DIR  validate generated/26.3 through DLL create\n"
@@ -185,6 +201,22 @@ bool parse_options(int argc, char** argv, Options& options) {
       options.third_person = true;
     } else if (arg == "--show-aabb") {
       options.show_aabb = true;
+    } else if (arg == "--ui-spike") {
+      options.ui_spike = true;
+    } else if (arg == "--channel-spike") {
+      options.channel_spike = true;
+    } else if (arg == "--open-inventory") {
+      options.open_inventory = true;
+    } else if (arg == "--ui-scale") {
+      std::string value;
+      if (!next(value)) return false;
+      options.ui_scale = static_cast<float>(std::atof(value.c_str()));
+      if (options.ui_scale <= 0.0f) options.ui_scale = 2.0f;
+    } else if (arg == "--ui-click") {
+      std::string x, y;
+      if (!next(x) || !next(y)) return false;
+      options.ui_click_x = static_cast<float>(std::atof(x.c_str()));
+      options.ui_click_y = static_cast<float>(std::atof(y.c_str()));
     } else if (arg == "--auto-walk") {
       std::string value;
       if (!next(value)) return false;
@@ -216,6 +248,8 @@ bool parse_options(int argc, char** argv, Options& options) {
       std::string value;
       if (!next(value)) return false;
       options.spawn_pitch = static_cast<float>(std::atof(value.c_str()));
+    } else if (arg == "--scenario") {
+      if (!next(options.scenario)) return false;
     } else {
       std::fprintf(stderr, "unknown argument: %s\n", arg.c_str());
       return false;
@@ -433,11 +467,20 @@ struct HostState {
   double auto_walk_seconds = 0.0;
   uint64_t auto_walk_ticks = 0;
   uint64_t auto_walk_ready_tick = 0;
+  uint64_t last_audio_sequence = 0;
   bool auto_walk_started = false;
   bool auto_walk_finished = false;
   std::chrono::steady_clock::time_point auto_walk_start;
   ReimVec3 auto_walk_from{0.0f, 0.0f, 0.0f};
   float auto_walk_distance = 0.0f;
+  /* v3 UI pointer mode: the Runtime decides what the pointer hits. */
+  bool ui_pointer_mode = false;
+  bool modal_screen = false;
+  uint32_t last_screen = REIM_SCREEN_HUD;
+  uint32_t ui_buttons = 0;
+  double ui_cursor_x = 0.0;
+  double ui_cursor_y = 0.0;
+  uint64_t action_sequence = 0;
 };
 
 void submit_key(const HostState& state, int key, int action) {
@@ -447,6 +490,62 @@ void submit_key(const HostState& state, int key, int action) {
   event.key = key;
   event.action = action;
   state.api->submit_input(state.instance, &event);
+}
+
+void play_audio(const ReimRenderFrame& frame, HostState& state) {
+#ifdef _WIN32
+  for (uint32_t i = 0; i < frame.audio_count; ++i) {
+    const ReimAudioEvent& event = frame.audio_events[i];
+    if (event.sequence <= state.last_audio_sequence) continue;
+    state.last_audio_sequence = event.sequence;
+    /* The A6 spike sound is synthesized; the resource pipeline (M3-I) will
+     * deliver OGG assets through SOUND_OGG. */
+    if (event.sound_id == 1) {
+      reim::log::info("audio",
+                      "spike sound #" + std::to_string(event.sequence) +
+                          " (UI, 2D) -> Beep");
+      std::thread([] { ::Beep(880, 45); }).detach();
+    }
+  }
+#else
+  (void)frame;
+  (void)state;
+#endif
+}
+
+void submit_pointer(HostState& state, double x, double y, uint32_t buttons) {
+  state.ui_cursor_x = x;
+  state.ui_cursor_y = y;
+  state.ui_buttons = buttons;
+  ReimActionEvent event{};
+  event.struct_size = sizeof(event);
+  event.type = REIM_ACTIONTYPE_POINTER;
+  event.sequence = ++state.action_sequence;
+  event.c = buttons;
+  event.screen_x = static_cast<float>(x);
+  event.screen_y = static_cast<float>(y);
+  state.api->submit_action(state.instance, &event);
+}
+
+/* HUD-mode world intents (M3-D04): the Host only submits the START/STOP
+ * pair; the Runtime owns target selection, progress and world changes. */
+void submit_action(HostState& state, uint32_t type) {
+  ReimActionEvent event{};
+  event.struct_size = sizeof(event);
+  event.type = type;
+  event.sequence = ++state.action_sequence;
+  event.screen_id = state.last_screen;
+  state.api->submit_action(state.instance, &event);
+}
+
+void submit_wheel(HostState& state, double delta) {
+  ReimActionEvent event{};
+  event.struct_size = sizeof(event);
+  event.type = REIM_ACTIONTYPE_WHEEL;
+  event.sequence = ++state.action_sequence;
+  event.screen_id = state.last_screen;
+  event.wheel = static_cast<float>(delta);
+  state.api->submit_action(state.instance, &event);
 }
 
 int map_key(int key) {
@@ -462,6 +561,19 @@ int map_key(int key) {
     case GLFW_KEY_DOWN: return REIM_KEY_DOWN;
     case GLFW_KEY_LEFT: return REIM_KEY_LEFT;
     case GLFW_KEY_RIGHT: return REIM_KEY_RIGHT;
+    case GLFW_KEY_E: return REIM_KEY_E;
+    case GLFW_KEY_Q: return REIM_KEY_Q;
+    case GLFW_KEY_ENTER: return REIM_KEY_ENTER;
+    case GLFW_KEY_TAB: return REIM_KEY_TAB;
+    case GLFW_KEY_1: return REIM_KEY_1;
+    case GLFW_KEY_2: return REIM_KEY_2;
+    case GLFW_KEY_3: return REIM_KEY_3;
+    case GLFW_KEY_4: return REIM_KEY_4;
+    case GLFW_KEY_5: return REIM_KEY_5;
+    case GLFW_KEY_6: return REIM_KEY_6;
+    case GLFW_KEY_7: return REIM_KEY_7;
+    case GLFW_KEY_8: return REIM_KEY_8;
+    case GLFW_KEY_9: return REIM_KEY_9;
     default: return REIM_KEY_UNKNOWN;
   }
 }
@@ -486,7 +598,15 @@ void key_callback(GLFWwindow* window, int key, int /*scancode*/, int action,
   if (state == nullptr) return;
 
   if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
-    if (state->captured) {
+    /* The Runtime owns the pause/close state machine (M3-H5); the Host only
+     * forwards the key and restores the mouse. */
+    ReimInputEvent event{};
+    event.struct_size = sizeof(event);
+    event.type = REIM_INPUT_KEY;
+    event.key = REIM_KEY_ESCAPE;
+    event.action = REIM_ACTION_PRESS;
+    state->api->submit_input(state->instance, &event);
+    if (state->modal_screen || state->captured) {
       release_mouse(window, *state);
     } else {
       glfwSetWindowShouldClose(window, GLFW_TRUE);
@@ -520,7 +640,12 @@ void key_callback(GLFWwindow* window, int key, int /*scancode*/, int action,
 
 void cursor_callback(GLFWwindow* window, double x, double y) {
   auto* state = static_cast<HostState*>(glfwGetWindowUserPointer(window));
-  if (state == nullptr || !state->captured) return;
+  if (state == nullptr) return;
+  if (state->ui_pointer_mode) {
+    submit_pointer(*state, x, y, state->ui_buttons);
+    return;
+  }
+  if (!state->captured) return;
   if (state->first_cursor) {
     state->first_cursor = false;
     state->last_cursor_x = x;
@@ -540,18 +665,37 @@ void cursor_callback(GLFWwindow* window, double x, double y) {
   state->api->submit_input(state->instance, &event);
 }
 
+void scroll_callback(GLFWwindow* window, double /*xoffset*/, double yoffset) {
+  auto* state = static_cast<HostState*>(glfwGetWindowUserPointer(window));
+  if (state == nullptr || yoffset == 0.0) return;
+  submit_wheel(*state, yoffset);
+}
+
 void mouse_button_callback(GLFWwindow* window, int button, int action, int /*mods*/) {
   auto* state = static_cast<HostState*>(glfwGetWindowUserPointer(window));
   if (state == nullptr) return;
-  if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
-    capture_mouse(window, *state);
+  if (state->ui_pointer_mode) {
+    uint32_t buttons = state->ui_buttons;
+    if (button == GLFW_MOUSE_BUTTON_LEFT) {
+      if (action == GLFW_PRESS) buttons |= REIM_POINTER_BUTTON_LEFT;
+      else buttons &= ~REIM_POINTER_BUTTON_LEFT;
+    } else if (button == GLFW_MOUSE_BUTTON_RIGHT) {
+      if (action == GLFW_PRESS) buttons |= REIM_POINTER_BUTTON_RIGHT;
+      else buttons &= ~REIM_POINTER_BUTTON_RIGHT;
+    }
+    submit_pointer(*state, state->ui_cursor_x, state->ui_cursor_y, buttons);
+    return;
   }
-  ReimInputEvent event{};
-  event.struct_size = sizeof(event);
-  event.type = REIM_INPUT_MOUSE_BUTTON;
-  event.key = button;
-  event.action = action == GLFW_PRESS ? REIM_ACTION_PRESS : REIM_ACTION_RELEASE;
-  state->api->submit_input(state->instance, &event);
+  if (button == GLFW_MOUSE_BUTTON_LEFT) {
+    if (action == GLFW_PRESS) capture_mouse(window, *state);
+    submit_action(*state, action == GLFW_PRESS ? REIM_ACTIONTYPE_BREAK_START
+                                               : REIM_ACTIONTYPE_BREAK_STOP);
+  } else if (button == GLFW_MOUSE_BUTTON_RIGHT) {
+    submit_action(*state, action == GLFW_PRESS ? REIM_ACTIONTYPE_USE_START
+                                               : REIM_ACTIONTYPE_USE_STOP);
+  } else if (button == GLFW_MOUSE_BUTTON_MIDDLE && action == GLFW_PRESS) {
+    submit_action(*state, REIM_ACTIONTYPE_PICK_BLOCK);
+  }
 }
 
 void focus_callback(GLFWwindow* window, int focused) {
@@ -941,6 +1085,7 @@ int main(int argc, char** argv) {
 
   reim::preview::Renderer renderer;
   std::string render_error;
+  reim::preview::UiCanvas ui_canvas;
   reim::preview::Hud hud;
   std::string hud_error;
   if (!hud.initialize(hud_error)) {
@@ -976,7 +1121,11 @@ int main(int argc, char** argv) {
   config.generated_path = generated_path.c_str();
   config.minecraft_dir = minecraft_path.empty() ? nullptr : minecraft_path.c_str();
   config.render_distance = options.render_distance;
+  config.render_level = 2; /* REIMPreview consumes the full Runtime frame set. */
   config.flags = 0;
+  if (options.ui_spike) config.flags |= REIM_CONFIG_FLAG_UI_SPIKE;
+  if (options.channel_spike) config.flags |= REIM_CONFIG_FLAG_CHANNEL_SPIKE;
+  config.ui_scale = static_cast<uint32_t>(options.ui_scale);
   config.mouse_sensitivity = options.sensitivity;
   config.invert_y = options.invert_y ? 1u : 0u;
   if (options.spawn_override) {
@@ -986,6 +1135,33 @@ int main(int argc, char** argv) {
     config.spawn_z = options.spawn_z;
     config.spawn_yaw = options.spawn_yaw;
     config.spawn_pitch = options.spawn_pitch;
+  }
+  std::string scenario_text;
+  if (!options.scenario.empty()) {
+    std::ifstream stream(options.scenario, std::ios::binary);
+    if (!stream) {
+      reim::log::error("preview", "cannot read scenario: " + options.scenario);
+      return 2;
+    }
+    scenario_text.assign(std::istreambuf_iterator<char>(stream),
+                         std::istreambuf_iterator<char>());
+    const auto scenario_json = nlohmann::json::parse(
+        scenario_text.begin(), scenario_text.end(), nullptr, false);
+    if (!scenario_json.is_discarded() && scenario_json.is_object()) {
+      config.create_world = scenario_json.value("create_world", false) ? 1u : 0u;
+      config.seed = scenario_json.value("seed", 0ull);
+      if (scenario_json.contains("spawn") &&
+          scenario_json["spawn"].is_array() &&
+          scenario_json["spawn"].size() >= 3) {
+        config.flags |= REIM_CONFIG_FLAG_SPAWN_OVERRIDE;
+        config.spawn_x = scenario_json["spawn"][0].get<float>();
+        config.spawn_y = scenario_json["spawn"][1].get<float>();
+        config.spawn_z = scenario_json["spawn"][2].get<float>();
+        config.spawn_yaw = scenario_json.value("spawn_yaw", 0.0f);
+        config.spawn_pitch = scenario_json.value("spawn_pitch", 0.0f);
+      }
+    }
+    config.scenario = scenario_text.c_str();
   }
 
   int32_t create_error = 0;
@@ -1010,8 +1186,8 @@ int main(int argc, char** argv) {
   uint64_t atlas_size = 0;
   uint64_t atlas_revision = 0;
   const bool have_asset =
-      dll.api->get_asset(instance, REIM_ASSET_ATLAS_PNG, &atlas_bytes, &atlas_size,
-                         &atlas_revision) == REIM_OK &&
+      dll.api->get_asset(instance, REIM_ASSET_ATLAS_PNG, 0, &atlas_bytes,
+                         &atlas_size, &atlas_revision) == REIM_OK &&
       atlas_bytes != nullptr && atlas_size != 0;
   const bool atlas_ok =
       have_asset ? renderer.initialize_from_png(
@@ -1037,6 +1213,79 @@ int main(int argc, char** argv) {
                     "get_asset(ATLAS_PNG) failed; using generated/atlas.png fallback");
   }
 
+  /* v3 UI canvas needs the Runtime font atlas and the block atlas. Both are
+   * Runtime-owned assets; UiCanvas copies them into GL textures. */
+  const void* font_bytes = nullptr;
+  uint64_t font_size = 0;
+  uint64_t font_revision = 0;
+  const bool have_font =
+      dll.api->get_asset(instance, REIM_ASSET_FONT_ATLAS, 0, &font_bytes,
+                         &font_size, &font_revision) == REIM_OK &&
+      font_bytes != nullptr && font_size != 0;
+  if (have_asset && have_font) {
+    std::string ui_error;
+    if (!ui_canvas.initialize(static_cast<const uint8_t*>(atlas_bytes),
+                              static_cast<size_t>(atlas_size),
+                              static_cast<const uint8_t*>(font_bytes),
+                              static_cast<size_t>(font_size), ui_error)) {
+      reim::log::error("preview", ui_error);
+      dll.api->destroy(instance);
+      hud.shutdown();
+      renderer.shutdown();
+      glfwDestroyWindow(window);
+      glfwTerminate();
+      return 8;
+    }
+  } else if (options.ui_spike) {
+    reim::log::error("preview", "UI spike requested but atlas/font assets are missing");
+    dll.api->destroy(instance);
+    hud.shutdown();
+    renderer.shutdown();
+    glfwDestroyWindow(window);
+    glfwTerminate();
+    return 8;
+  }
+
+  const void* model_bytes = nullptr;
+  uint64_t model_size = 0;
+  uint64_t model_revision = 0;
+  if (dll.api->get_asset(instance, REIM_ASSET_MODEL_DEFS_JSON, 0, &model_bytes,
+                         &model_size, &model_revision) == REIM_OK &&
+      model_bytes != nullptr && model_size != 0) {
+    std::string model_error;
+    if (!renderer.load_model_defs(model_bytes, static_cast<size_t>(model_size),
+                                  model_error)) {
+      reim::log::warn("preview", "model defs rejected: " + model_error);
+    }
+  }
+
+  {
+    const void* item_png = nullptr;
+    uint64_t item_png_size = 0;
+    uint64_t item_png_revision = 0;
+    const void* item_meta = nullptr;
+    uint64_t item_meta_size = 0;
+    uint64_t item_meta_revision = 0;
+    const void* item_index = nullptr;
+    uint64_t item_index_size = 0;
+    uint64_t item_index_revision = 0;
+    if (dll.api->get_asset(instance, REIM_ASSET_ITEM_ATLAS_PNG, 0, &item_png,
+                           &item_png_size, &item_png_revision) == REIM_OK &&
+        dll.api->get_asset(instance, REIM_ASSET_ITEM_ATLAS_META, 0, &item_meta,
+                           &item_meta_size, &item_meta_revision) == REIM_OK &&
+        dll.api->get_asset(instance, REIM_ASSET_ITEM_INDEX_JSON, 0, &item_index,
+                           &item_index_size, &item_index_revision) == REIM_OK &&
+        item_png != nullptr && item_meta != nullptr && item_index != nullptr) {
+      std::string item_error;
+      if (!renderer.load_item_assets(item_png, static_cast<size_t>(item_png_size),
+                                     item_meta, static_cast<size_t>(item_meta_size),
+                                     item_index, static_cast<size_t>(item_index_size),
+                                     item_error)) {
+        reim::log::warn("preview", "item atlas rejected: " + item_error);
+      }
+    }
+  }
+
   const int32_t start_result = dll.api->start(instance);
   if (start_result != REIM_OK) {
     reim::log::error("preview", std::format("start failed: {} ({})",
@@ -1058,12 +1307,17 @@ int main(int argc, char** argv) {
   state.instance = instance;
   state.third_person = options.third_person;
   state.debug_aabb = options.show_aabb;
+  state.ui_pointer_mode = options.ui_spike;
   state.auto_walk_seconds = options.auto_walk_seconds;
   state.auto_walk_ticks = options.auto_walk_ticks;
+  if (state.ui_pointer_mode) {
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+  }
   glfwSetWindowUserPointer(window, &state);
   glfwSetKeyCallback(window, &key_callback);
   glfwSetCursorPosCallback(window, &cursor_callback);
   glfwSetMouseButtonCallback(window, &mouse_button_callback);
+  glfwSetScrollCallback(window, &scroll_callback);
   glfwSetWindowFocusCallback(window, &focus_callback);
 
   glEnable(GL_DEPTH_TEST);
@@ -1080,6 +1334,8 @@ int main(int argc, char** argv) {
   auto next_stats_frame = start_time + std::chrono::milliseconds(500);
   uint64_t frames = 0;
   bool ready_logged = false;
+  bool ui_click_sent = false;
+  bool inventory_key_sent = false;
   bool screenshot_written = false;
   std::string exit_reason = "window_closed";
   ReimRenderFrame last_frame{};
@@ -1101,13 +1357,30 @@ int main(int argc, char** argv) {
     }
     last_frame = frame;
     renderer.apply_frame(frame);
-    /* The GL upload above is synchronous; the blob is consumed. */
-    dll.api->release_frame(instance, frame.frame_id);
+    dll.api->set_ui_canvas(instance, static_cast<uint32_t>(fb_width),
+                           static_cast<uint32_t>(fb_height), options.ui_scale);
+
+    /* The Runtime owns screen state; the Host switches capture/pointer mode
+     * from the published screen id instead of deciding it itself (M3-H5). */
+    state.last_screen = frame.ui.screen_id;
+    state.modal_screen =
+        frame.ui.screen_id == REIM_SCREEN_INVENTORY ||
+        frame.ui.screen_id == REIM_SCREEN_CRAFTING_TABLE ||
+        frame.ui.screen_id == REIM_SCREEN_FURNACE ||
+        frame.ui.screen_id == REIM_SCREEN_CHEST ||
+        frame.ui.screen_id == REIM_SCREEN_PAUSE ||
+        frame.ui.screen_id == REIM_SCREEN_DEATH;
+    state.ui_pointer_mode = options.ui_spike || state.modal_screen;
+    if (state.modal_screen && state.captured) release_mouse(window, state);
+    if (state.modal_screen) {
+      glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+    }
 
     reim::preview::RenderOptions render_options;
     render_options.third_person = state.third_person;
     render_options.debug_player_aabb = state.debug_aabb;
     renderer.render(frame, render_options, fb_width, fb_height);
+    play_audio(frame, state);
 
     const auto now = std::chrono::steady_clock::now();
     const double elapsed =
@@ -1128,6 +1401,12 @@ int main(int argc, char** argv) {
                fb_height);
       hud.end();
     }
+    /* v3 UI draws on top of the diagnostic HUD. The blob must still be alive:
+     * release happens after this point. */
+    if (frame.ui.draw_count != 0) {
+      ui_canvas.draw(frame.ui, fb_width, fb_height);
+    }
+    dll.api->release_frame(instance, frame.frame_id);
 
     if (frame.ready && !ready_logged) {
       ready_logged = true;
@@ -1137,6 +1416,20 @@ int main(int argc, char** argv) {
                                   frame.loaded_chunks, frame.mesh_sections,
                                   frame.player.position.x, frame.player.position.y,
                                   frame.player.position.z));
+    }
+    if (frame.ready && !ui_click_sent && options.ui_click_x >= 0.0f &&
+        options.ui_click_y >= 0.0f) {
+      ui_click_sent = true;
+      submit_pointer(state, options.ui_click_x, options.ui_click_y,
+                     REIM_POINTER_BUTTON_LEFT);
+      reim::log::info("preview",
+                      std::format("UI click submitted at {},{}",
+                                  options.ui_click_x, options.ui_click_y));
+    }
+    if (frame.ready && options.open_inventory && !inventory_key_sent) {
+      inventory_key_sent = true;
+      submit_key(state, REIM_KEY_E, REIM_ACTION_PRESS);
+      reim::log::info("preview", "inventory key submitted (diagnostic)");
     }
 
     // Optional automation: prove the Host -> ABI input path moves the player.
@@ -1283,6 +1576,7 @@ int main(int argc, char** argv) {
   dll.api->stop(instance);
   dll.api->destroy(instance);
   hud.shutdown();
+  ui_canvas.shutdown();
   renderer.shutdown();
   glfwDestroyWindow(window);
   glfwTerminate();

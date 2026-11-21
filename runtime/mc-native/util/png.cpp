@@ -35,6 +35,26 @@ bool load_file(const std::string& path_utf8, int desired_channels, Image& out,
   return load_memory(bytes.data(), bytes.size(), desired_channels, out, error);
 }
 
+bool encode_memory(int width, int height, int channels, const uint8_t* pixels,
+                   std::vector<uint8_t>& out, std::string& error) {
+  if (width <= 0 || height <= 0 || channels <= 0 || pixels == nullptr) {
+    error = "invalid PNG encode arguments";
+    return false;
+  }
+  int length = 0;
+  unsigned char* encoded =
+      stbi_write_png_to_mem(pixels, width * channels, width, height, channels,
+                            &length);
+  if (encoded == nullptr || length <= 0) {
+    if (encoded != nullptr) STBIW_FREE(encoded);
+    error = "PNG encode failed";
+    return false;
+  }
+  out.assign(encoded, encoded + length);
+  STBIW_FREE(encoded);
+  return true;
+}
+
 bool write_file(const std::string& path_utf8, int width, int height, int channels,
                 const uint8_t* pixels, std::string& error) {
   std::error_code ec;

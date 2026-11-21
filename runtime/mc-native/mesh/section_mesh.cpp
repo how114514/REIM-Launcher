@@ -68,10 +68,28 @@ uint32_t fallback_tint(data::TintKind kind) {
 uint32_t resolve_tint(const data::BlockTable& blocks, const world::Section& section,
                       uint32_t baked, data::TintKind kind, int lx, int ly, int lz) {
   if (kind == data::TintKind::none) return baked;
-  const std::string biome = section.biome(lx, ly, lz);
-  uint32_t color = 0;
-  if (!biome.empty() && blocks.biome_color(biome, kind, color)) return color;
-  return fallback_tint(kind);
+  /* J2: 3x3 biome-cell tint blend (center + 4 samples, clamped to the
+   * section). This removes the worst single-cell colour banding; cross-section
+   * blending and full smooth-lighting AO are still follow-ups. */
+  uint32_t sum_r = 0;
+  uint32_t sum_g = 0;
+  uint32_t sum_b = 0;
+  uint32_t samples = 0;
+  const int offsets[5][2] = {{0, 0}, {2, 0}, {-2, 0}, {0, 2}, {0, -2}};
+  for (const auto& offset : offsets) {
+    const std::string biome = section.biome(lx + offset[0], ly, lz + offset[1]);
+    uint32_t color = 0;
+    if (!biome.empty() && blocks.biome_color(biome, kind, color)) {
+      sum_r += color & 0xFFu;
+      sum_g += (color >> 8) & 0xFFu;
+      sum_b += (color >> 16) & 0xFFu;
+      ++samples;
+    }
+  }
+  if (samples == 0) return fallback_tint(kind);
+  const uint32_t alpha = (fallback_tint(kind) >> 24) & 0xFFu;
+  return (alpha << 24) | ((sum_b / samples) << 16) | ((sum_g / samples) << 8) |
+         (sum_r / samples);
 }
 
 void push_quad(std::vector<ReimVertex>& vertices, std::vector<uint32_t>& indices,

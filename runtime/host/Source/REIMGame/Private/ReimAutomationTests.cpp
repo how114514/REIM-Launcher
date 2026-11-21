@@ -233,12 +233,29 @@ bool FReimBridgeErrorsTest::RunTest(const FString& /*Parameters*/)
 	TestTrue(TEXT("missing world reports an error"), ErrorCode != REIM_OK);
 	if (Instance != nullptr) Api->destroy(Instance);
 
+	/* M3-J8: the Runtime negotiates render levels 0/1/2; only values above 2
+	 * are a capability error. The UE Host still pins R0, so this test talks
+	 * to the DLL directly rather than through the Bridge. */
 	Config.world_path = *WorldPath;
 	Config.render_level = 1;
 	ErrorCode = REIM_OK;
 	Instance = Api->create(&Config, &Host, &ErrorCode);
-	TestNull(TEXT("render_level 1 rejected"), static_cast<void*>(Instance));
-	TestEqual(TEXT("render_level 1 is REIM_ERR_CAPABILITY"), ErrorCode,
+	TestNotNull(TEXT("render_level 1 accepted"), static_cast<void*>(Instance));
+	if (Instance != nullptr)
+	{
+		ReimRuntimeInfo LevelInfo{};
+		LevelInfo.struct_size = sizeof(LevelInfo);
+		TestEqual(TEXT("render_level 1 info"), Api->get_runtime_info(Instance, &LevelInfo),
+		          static_cast<int32>(REIM_OK));
+		TestEqual(TEXT("runtime reports render level 1"), LevelInfo.render_level, 1u);
+		Api->destroy(Instance);
+	}
+
+	Config.render_level = 3;
+	ErrorCode = REIM_OK;
+	Instance = Api->create(&Config, &Host, &ErrorCode);
+	TestNull(TEXT("render_level 3 rejected"), static_cast<void*>(Instance));
+	TestEqual(TEXT("render_level 3 is REIM_ERR_CAPABILITY"), ErrorCode,
 	          static_cast<int32>(REIM_ERR_CAPABILITY));
 	if (Instance != nullptr) Api->destroy(Instance);
 
@@ -278,7 +295,7 @@ bool FReimBridgeErrorsTest::RunTest(const FString& /*Parameters*/)
 	Api->destroy(Instance);
 
 	::FreeLibrary(Dll);
-	AddInfo(TEXT("ABI rejection, world/render_level rejection and clean lifecycle passed"));
+	AddInfo(TEXT("ABI rejection, world/render_level negotiation (0/1/2, >2 rejected) and clean lifecycle passed"));
 	return true;
 #else
 	AddError(TEXT("REIM Runtime is Windows-only"));

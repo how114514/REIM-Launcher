@@ -1,0 +1,207 @@
+{
+  "id": "INV-09",
+  "description": "Shift-click moves a hotbar stack into the chest",
+  "spawn": [
+    16.5,
+    100.0,
+    80.5
+  ],
+  "spawn_yaw": 0.0,
+  "spawn_pitch": 90.0,
+  "render_distance": 2,
+  "ui_canvas": [
+    1280,
+    720,
+    2
+  ],
+  "timeout_ms": 30000,
+  "setup": [
+    {
+      "action": "clear_inventory"
+    },
+    {
+      "action": "give",
+      "item": "minecraft:apple",
+      "count": 3
+    },
+    {
+      "action": "set_block",
+      "x": 15,
+      "y": 99,
+      "z": 79,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 15,
+      "y": 99,
+      "z": 80,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 15,
+      "y": 99,
+      "z": 81,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 16,
+      "y": 99,
+      "z": 79,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 16,
+      "y": 99,
+      "z": 80,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 16,
+      "y": 99,
+      "z": 81,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 17,
+      "y": 99,
+      "z": 79,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 17,
+      "y": 99,
+      "z": 80,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 17,
+      "y": 99,
+      "z": 81,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 15,
+      "y": 98,
+      "z": 79,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 15,
+      "y": 98,
+      "z": 80,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 15,
+      "y": 98,
+      "z": 81,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 16,
+      "y": 98,
+      "z": 79,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 16,
+      "y": 98,
+      "z": 80,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 16,
+      "y": 98,
+      "z": 81,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 17,
+      "y": 98,
+      "z": 79,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 17,
+      "y": 98,
+      "z": 80,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 17,
+      "y": 98,
+      "z": 81,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 19,
+      "y": 99,
+      "z": 79,
+      "block": "minecraft:chest"
+    }
+  ],
+  "probes": [],
+  "steps": [
+    {
+      "wait_ticks": 3
+    },
+    {
+      "action": {
+        "type": "use_block",
+        "x": 19.0,
+        "y": 99.0,
+        "z": 79.0
+      }
+    },
+    {
+      "wait_ticks": 2
+    },
+    {
+      "action": {
+        "type": "slot_click",
+        "screen": 6,
+        "a": 54,
+        "b": 0,
+        "c": 256
+      }
+    },
+    {
+      "wait_ticks": 2
+    },
+    {
+      "fetch_frames": 2
+    }
+  ],
+  "assert": [
+    {
+      "type": "slot_item",
+      "slot": 0,
+      "item": "minecraft:apple",
+      "count": 3
+    },
+    {
+      "type": "slot_item",
+      "slot": 54,
+      "item": "",
+      "count": 0
+    }
+  ]
+}

@@ -25,8 +25,14 @@ out/
 inspect-world.json
 inspect-world-rerun.json
 
-# Mojang metadata downloaded during setup; never commit Mojang files (M1-D06)
+# Mojang metadata/library files downloaded during setup; never commit Mojang files (M1-D06)
 version_manifest_v2.json
+versions/
+libraries/
+
+# Python caches
+__pycache__/
+*.pyc
 
 # UE project transients (M2-A7); Content/*.uasset|*.umap are committed via LFS
 runtime/host/Binaries/

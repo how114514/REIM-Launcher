@@ -1,0 +1,19 @@
+{
+  "id": "WLD-02",
+  "description": "Seed determinism: an independent run of seed 12345 repeats the spawn and surface",
+  "create_world": true,
+  "seed": 12345,
+  "render_distance": 2,
+  "ui_canvas": [1280, 720, 2],
+  "timeout_ms": 40000,
+  "probes": [[0, 65, 0], [0, 66, 0]],
+  "steps": [
+    { "wait_ticks": 30 },
+    { "fetch_frames": 2 }
+  ],
+  "assert": [
+    { "type": "status_equals", "path": "world.spawn_surface", "value": 65 },
+    { "type": "block_at", "x": 0, "y": 65, "z": 0, "state": "minecraft:sand" },
+    { "type": "block_at", "x": 0, "y": 66, "z": 0, "state": "minecraft:air" }
+  ]
+}

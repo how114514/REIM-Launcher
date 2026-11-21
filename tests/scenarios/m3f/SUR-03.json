@@ -1,0 +1,25 @@
+{
+  "id": "SUR-03",
+  "description": "Lava damage: standing in lava hurts and sets the player on fire",
+  "spawn": [16.5, 100.0, 80.5],
+  "spawn_yaw": 0.0,
+  "spawn_pitch": 90.0,
+  "render_distance": 2,
+  "ui_canvas": [1280, 720, 2],
+  "timeout_ms": 30000,
+  "setup": [
+    { "action": "clear_inventory" },
+    { "action": "platform", "x": 16, "y": 99, "z": 80, "radius": 1 },
+    { "action": "set_block", "x": 16, "y": 100, "z": 80, "block": "minecraft:lava" },
+    { "action": "set_block", "x": 16, "y": 101, "z": 80, "block": "minecraft:lava" }
+  ],
+  "steps": [
+    { "wait_ticks": 30 },
+    { "fetch_frames": 2 }
+  ],
+  "assert": [
+    { "type": "player_health_at_most", "value": 16.0 },
+    { "type": "damage_taken_at_least", "value": 4.0 },
+    { "type": "status_equals", "path": "gameplay.survival.on_fire", "value": true }
+  ]
+}

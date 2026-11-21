@@ -1,0 +1,26 @@
+{
+  "id": "MOB-04",
+  "description": "Creeper explosion: limited block destruction and player damage",
+  "spawn": [16.5, 100.0, 80.5],
+  "spawn_yaw": 0.0,
+  "spawn_pitch": 90.0,
+  "render_distance": 2,
+  "ui_canvas": [1280, 720, 2],
+  "timeout_ms": 30000,
+  "setup": [
+    { "action": "clear_inventory" },
+    { "action": "platform", "x": 16, "y": 99, "z": 80, "radius": 3 },
+    { "action": "spawn_entity", "entity": "creeper", "x": 16, "y": 100, "z": 83 }
+  ],
+  "probes": [[16, 99, 82]],
+  "steps": [
+    { "wait_ticks": 50 },
+    { "fetch_frames": 2 }
+  ],
+  "assert": [
+    { "type": "player_health_at_most", "value": 19.0 },
+    { "type": "damage_taken_at_least", "value": 1.0 },
+    { "type": "block_at", "x": 16, "y": 99, "z": 82, "state": "minecraft:air" },
+    { "type": "entity_type_count", "entity": "minecraft:creeper", "min": 0, "max": 0 }
+  ]
+}

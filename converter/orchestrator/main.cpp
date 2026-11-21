@@ -1,6 +1,10 @@
 #include "analyze.h"
 #include "common.h"
+#include "data.h"
+#include "diff.h"
 #include "extract.h"
+#include "ledger.h"
+#include "patch.h"
 #include "inspect_world.h"
 #include "package.h"
 #include "prepare.h"
@@ -42,8 +46,14 @@ void print_usage() {
       "reim-convert, M2 Converter (M1 surface + ABI 2 data)\n"
       "\n"
       "  prepare --minecraft-dir <dir> --version 26.3 --out work/26.3 [--server-jar <jar>]\n"
+      "  data    --profile 26.3 --out work/26.3 [--server-jar <jar>] [--java <java.exe>]\n"
+      "          [--skip-reports] [--force-reports]\n"
       "  analyze --profile 26.3 --out work/26.3 [--jar <client.jar>] [--analyzer <jar>] [--java <java.exe>]\n"
       "  extract --profile 26.3 --out generated/26.3 [--profile-dir work/26.3] [--jar <client.jar>]\n"
+      "  diff    --old <generated-old> --new <generated-new> --out <dir>\n"
+      "          [--old-analysis <dir> --new-analysis <dir>]\n"
+      "  ledger  --profile 26.3 --out work/26.3 [--ledger converter/ledger/26.3.json] [--check]\n"
+      "  patch   apply|verify|list|selftest --set converter/patches/26.3 [--target <dir>] [--out <file>]\n"
       "  verify  --generated generated/26.3 [--profile 26.3]\n"
       "  inspect-world --world <save> [--out report.json]\n"
       "  package --profile 26.3 --generated generated/26.3 --dll build/m2/bin/mc_26.3.dll\n"
@@ -90,8 +100,16 @@ int main(int argc, char** argv) {
   const auto args = reim::conv::parse_args(argc, argv, 2);
 
   if (command == "prepare") return reim::conv::run_prepare(args, exe_dir);
+  if (command == "data") return reim::conv::run_data(args, exe_dir);
   if (command == "analyze") return reim::conv::run_analyze(args, exe_dir);
   if (command == "extract") return reim::conv::run_extract(args, exe_dir);
+  if (command == "diff") return reim::conv::run_diff(args, exe_dir);
+  if (command == "ledger") return reim::conv::run_ledger(args, exe_dir);
+  if (command == "patch") {
+    auto patch_args = reim::conv::parse_args(argc, argv, 3);
+    patch_args.values.emplace_back("action", argc > 2 ? argv[2] : "");
+    return reim::conv::run_patch(patch_args, exe_dir);
+  }
   if (command == "verify") return run_verify(args);
   if (command == "inspect-world") return reim::conv::run_inspect_world(args, exe_dir);
   if (command == "package") {

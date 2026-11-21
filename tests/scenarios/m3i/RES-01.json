@@ -1,0 +1,166 @@
+{
+  "id": "RES-01",
+  "description": "Resource and data packs load at startup; language/sound/texture overrides are applied and counted",
+  "spawn": [
+    16.5,
+    100.0,
+    80.5
+  ],
+  "spawn_yaw": 0.0,
+  "spawn_pitch": 90.0,
+  "render_distance": 2,
+  "ui_canvas": [
+    1280,
+    720,
+    2
+  ],
+  "timeout_ms": 30000,
+  "resource_packs": [
+    "tests/fixtures/packs/res_ok"
+  ],
+  "data_packs": [
+    "tests/fixtures/packs/data_ok"
+  ],
+  "setup": [
+    {
+      "action": "clear_inventory"
+    },
+    {
+      "action": "give",
+      "item": "minecraft:stone_pickaxe",
+      "count": 1
+    },
+    {
+      "action": "set_block",
+      "x": 15,
+      "y": 99,
+      "z": 79,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 16,
+      "y": 99,
+      "z": 79,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 17,
+      "y": 99,
+      "z": 79,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 15,
+      "y": 99,
+      "z": 80,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 16,
+      "y": 99,
+      "z": 80,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 17,
+      "y": 99,
+      "z": 80,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 15,
+      "y": 99,
+      "z": 81,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 16,
+      "y": 99,
+      "z": 81,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 17,
+      "y": 99,
+      "z": 81,
+      "block": "minecraft:stone"
+    }
+  ],
+  "steps": [
+    {
+      "wait_ticks": 3
+    },
+    {
+      "action": {
+        "type": "break_block",
+        "x": 17.0,
+        "y": 99.0,
+        "z": 80.0
+      }
+    },
+    {
+      "wait_ticks": 20
+    },
+    {
+      "fetch_frames": 2
+    }
+  ],
+  "assert": [
+    {
+      "type": "status_equals",
+      "path": "resource_packs.pack_count",
+      "value": 1
+    },
+    {
+      "type": "status_at_least",
+      "path": "resource_packs.lang_overrides",
+      "value": 1
+    },
+    {
+      "type": "status_at_least",
+      "path": "resource_packs.m3_overrides",
+      "value": 1
+    },
+    {
+      "type": "status_at_least",
+      "path": "resource_packs.texture_overrides",
+      "value": 1
+    },
+    {
+      "type": "status_equals",
+      "path": "data_packs.pack_count",
+      "value": 1
+    },
+    {
+      "type": "status_at_least",
+      "path": "data_packs.gameplay_overrides",
+      "value": 1
+    },
+    {
+      "type": "block_at",
+      "x": 17,
+      "y": 99,
+      "z": 80,
+      "state": "minecraft:air"
+    },
+    {
+      "type": "audio_sound_seen",
+      "value": 20
+    }
+  ],
+  "probes": [
+    [
+      17,
+      99,
+      80
+    ]
+  ]
+}

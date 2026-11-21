@@ -1,0 +1,177 @@
+{
+  "id": "UI-04",
+  "description": "Opening a modal screen switches the Runtime cursor to an arrow",
+  "spawn": [
+    16.5,
+    100.0,
+    80.5
+  ],
+  "spawn_yaw": 0.0,
+  "spawn_pitch": 90.0,
+  "render_distance": 2,
+  "ui_canvas": [
+    1280,
+    720,
+    2
+  ],
+  "timeout_ms": 30000,
+  "setup": [
+    {
+      "action": "clear_inventory"
+    },
+    {
+      "action": "set_block",
+      "x": 15,
+      "y": 99,
+      "z": 79,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 15,
+      "y": 99,
+      "z": 80,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 15,
+      "y": 99,
+      "z": 81,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 16,
+      "y": 99,
+      "z": 79,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 16,
+      "y": 99,
+      "z": 80,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 16,
+      "y": 99,
+      "z": 81,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 17,
+      "y": 99,
+      "z": 79,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 17,
+      "y": 99,
+      "z": 80,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 17,
+      "y": 99,
+      "z": 81,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 15,
+      "y": 98,
+      "z": 79,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 15,
+      "y": 98,
+      "z": 80,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 15,
+      "y": 98,
+      "z": 81,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 16,
+      "y": 98,
+      "z": 79,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 16,
+      "y": 98,
+      "z": 80,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 16,
+      "y": 98,
+      "z": 81,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 17,
+      "y": 98,
+      "z": 79,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 17,
+      "y": 98,
+      "z": 80,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 17,
+      "y": 98,
+      "z": 81,
+      "block": "minecraft:stone"
+    }
+  ],
+  "probes": [],
+  "steps": [
+    {
+      "wait_ticks": 3
+    },
+    {
+      "input": {
+        "key": "e",
+        "action": "press"
+      }
+    },
+    {
+      "wait_ticks": 3
+    },
+    {
+      "fetch_frames": 2
+    }
+  ],
+  "assert": [
+    {
+      "type": "screen_equals",
+      "value": 3
+    },
+    {
+      "type": "ui_cursor_mode",
+      "value": 1
+    }
+  ]
+}

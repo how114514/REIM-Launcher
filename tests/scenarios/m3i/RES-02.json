@@ -1,0 +1,139 @@
+{
+  "id": "RES-02",
+  "description": "A pack with a missing atlas sprite and an unsupported model override warns and falls back without crashing",
+  "spawn": [
+    16.5,
+    100.0,
+    80.5
+  ],
+  "spawn_yaw": 0.0,
+  "spawn_pitch": 90.0,
+  "render_distance": 2,
+  "ui_canvas": [
+    1280,
+    720,
+    2
+  ],
+  "timeout_ms": 30000,
+  "resource_packs": [
+    "tests/fixtures/packs/res_missing"
+  ],
+  "setup": [
+    {
+      "action": "clear_inventory"
+    },
+    {
+      "action": "set_block",
+      "x": 15,
+      "y": 99,
+      "z": 79,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 16,
+      "y": 99,
+      "z": 79,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 17,
+      "y": 99,
+      "z": 79,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 15,
+      "y": 99,
+      "z": 80,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 16,
+      "y": 99,
+      "z": 80,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 17,
+      "y": 99,
+      "z": 80,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 15,
+      "y": 99,
+      "z": 81,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 16,
+      "y": 99,
+      "z": 81,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 17,
+      "y": 99,
+      "z": 81,
+      "block": "minecraft:stone"
+    }
+  ],
+  "steps": [
+    {
+      "wait_ticks": 3
+    },
+    {
+      "action": {
+        "type": "break_block",
+        "x": 17.0,
+        "y": 99.0,
+        "z": 80.0
+      }
+    },
+    {
+      "wait_ticks": 10
+    },
+    {
+      "fetch_frames": 2
+    }
+  ],
+  "assert": [
+    {
+      "type": "status_equals",
+      "path": "resource_packs.pack_count",
+      "value": 1
+    },
+    {
+      "type": "status_at_least",
+      "path": "resource_packs.unsupported_model_overrides",
+      "value": 1
+    },
+    {
+      "type": "status_at_least",
+      "path": "resource_packs.warning_count",
+      "value": 1
+    },
+    {
+      "type": "block_at",
+      "x": 17,
+      "y": 99,
+      "z": 80,
+      "state": "minecraft:air"
+    }
+  ],
+  "probes": [
+    [
+      17,
+      99,
+      80
+    ]
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "id": "M3A-UI-02",
+  "description": "A5/A4: Runtime hit testing turns a pointer hover + click into a button state change",
+  "flags": ["ui_spike"],
+  "ui_canvas": [1280, 720, 2],
+  "timeout_ms": 20000,
+  "steps": [
+    { "wait_ticks": 3 },
+    { "action": { "type": "pointer", "screen_x": 60.0, "screen_y": 120.0 } },
+    { "wait_ticks": 3 },
+    { "action": { "type": "pointer", "screen_x": 60.0, "screen_y": 120.0, "buttons": ["left"] } },
+    { "wait_ticks": 3 },
+    { "fetch_frames": 2 }
+  ],
+  "assert": [
+    { "type": "status_equals", "path": "ui.hovered_element", "value": 1 },
+    { "type": "status_equals", "path": "ui.button_on", "value": 1 },
+    { "type": "status_at_least", "path": "actions.applied", "value": 2 }
+  ]
+}

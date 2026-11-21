@@ -1,0 +1,7 @@
+{
+  "schema": "reim.patch_set",
+  "format": 1,
+  "profile": "26.3",
+  "note": "M3-L4 patch mechanism. Entries appear only when a version diff requires a controlled data/source correction; no entry is silently generated. `reim-convert patch verify --set converter/patches/26.3` exercises deterministic replay and the 3-way merge/conflict self-test.",
+  "entries": []
+}

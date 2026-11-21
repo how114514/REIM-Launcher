@@ -1771,7 +1771,7 @@ REIM Runtime Host ── Versioned C ABI ──> Native Minecraft DLL
 ### 8.2 C ABI 契约（示意）
 
 ```c
-#define REIM_ABI_VERSION 1
+#define REIM_ABI_VERSION 3   /* M3: frozen 2026-11-21; see 8.2.1 */
 
 typedef struct ReimInstanceConfig {
   const wchar_t* instance_dir;
@@ -1813,7 +1813,10 @@ typedef struct ReimRuntimeApi {
 
   // 任意线程：输入/设置/UI 动作（内部队列，模拟线程下一 tick 应用）
   void (*submit_input)(ReimInstance*, const ReimInputEvent*);
-  void (*submit_action)(ReimInstance*, const ReimAction*);
+  void (*submit_action)(ReimInstance*, const ReimActionEvent*);  // v3 intents
+  int  (*request_save)(ReimInstance*, uint32_t flags);           // v3 async save
+  int  (*get_save_status)(ReimInstance*, ReimSaveStatus*);
+  void (*set_ui_canvas)(ReimInstance*, uint32_t w, uint32_t h, float scale);
 
   // 可选：暂停/恢复模拟（不改变渲染 FPS）
   void (*set_simulation_paused)(ReimInstance*, bool paused);
@@ -1833,6 +1836,37 @@ REIM_EXPORT const ReimRuntimeApi* reim_get_api(uint32_t abi_version);
 - 不抛 C++ 异常；错误码 + `on_fatal`；
 - 线程契约写入头文件注释：`fetch_frame` 只能在 GT；`submit_*` 任意线程；模拟线程由 DLL 管理，固定 20 TPS，不被渲染 FPS 驱动；
 - 版本不匹配 → 拒绝加载并显示 diagnostic（不崩溃）。
+
+### 8.2.1 Contract v3 冻结记录（M3 阶段 1，2026-11-21）
+
+**头文件与 SHA-256**（原始值见 `build/m3/reports/contract-v3-sha256.txt`）：
+
+| 头文件 | 内容 | SHA-256 |
+|---|---|---|
+| `runtime/contract/reim_abi.h` | 实例/配置/动作/保存/资产/API 表 | `681c2d74…5508f` |
+| `runtime/contract/reim_render.h` | 帧/网格/相机/玩家/环境/实体/粒子 | `155f7fd3…f2ced` |
+| `runtime/contract/reim_game.h` | 物品/背包/交互/屏幕/动作/保存状态 | `a5fad2a1…d2f8` |
+| `runtime/contract/reim_ui.h` | UI 显示列表/命中语义/裁剪 | `a225e8a3…07e` |
+| `runtime/contract/reim_audio.h` | 音频事件/类别/上限 | `dce90ad4…bc69` |
+
+**冻结决议**
+
+1. ABI 3 冻结；v2 服务不保留。后续只允许 `struct_size` 前缀扩展 + capability 位；字段语义/所有权/线程变化升 v4。
+2. `REIM_ABI_VERSION=3`；Preview/headless/UE Bridge 同步重建；API 表在 v2 末尾追加 `submit_action`/`request_save`/`get_save_status`/`set_ui_canvas`，`get_asset` 增加 `asset_id`。
+3. 动作 = 意图：`ReimActionEvent` 由 Host 任意线程提交，下一 tick 应用；队列 1024，POINTER 合并为最新，非法/满队列记录拒绝。
+4. UI = Runtime 显示列表：`ReimUiDraw`（rect/textured quad/glyph quad + clip + tint），命中测试与槽位语义在 Runtime。
+5. 实体=模型实例：`ReimEntityRender` + `ReimPartTransform`；动画/部件变换由 Runtime 计算，Host 只插值绘制。
+6. 音频=事件：`ReimAudioEvent` 不进玩法逻辑；每帧上限 4096，可丢弃最旧环境音并计数。
+7. 帧内列表是 level-triggered：UI/实体/粒子/音频在每次 `fetch_frame` 中重发当前 tick 状态；网格 update/remove 仍是增量。
+8. 上限写死：UI 8192 draws/1 MB text、实体 8192/部件 1,048,576、粒子 65536、音频 4096、blob 64 MB。
+9. 线程/所有权：模拟线程拥有世界/UI/背包/命中；`fetch_frame` GT 单线程；`release_frame`/`submit_*` 任意线程；worker 不碰 UObject。
+
+**阶段 1 已知占位（不改变冻结形状）**
+
+- `generated` 仍为 ABI 2（M2 Converter）；Runtime/package 显式接受该布局并记录 `schema_version=2`，直到 M3-K7 产出 schema v3。不得称为 v3 数据。
+- `ReimEnvironmentSnapshot.time_of_day/weather` 在 G7 前为 0/clear；`ReimInteractionSnapshot.target_type` 在 D1 前为 NONE；`request_save` 在 B1 前返回 `REIM_ERR_NO_WORLD`。这些是显式未实现，不是伪造状态。
+- UI/实体/音频通道的 UE 可视化尚未接入；Preview/headless 已验证。UE **R0** 世界渲染已在阶段 5 实测（Zen server 启动后，Dev/Shipping 均进入真实存档并截图）；R1/R2、UI、实体、音频仍为 `not_run`（见 `M3_ACCEPTANCE.md` §3.10/§3.11）。
+- UE Adapter descriptor 在 K7 升到 format 3；阶段 5 S5-a 修正了 Bridge 仍校验 format 2 的缺陷，ABI/布局未变。`reim-convert package` 绑定 format 3 descriptor 与 v3 manifest。
 
 ### 8.3 渲染快照契约
 

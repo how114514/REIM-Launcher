@@ -2,6 +2,7 @@
 
 #include "reim_abi.h"
 
+#include "ingest_v3.h"
 #include "model_resolver.h"
 #include "prepare.h"
 #include "util/file.h"
@@ -535,6 +536,23 @@ int next_power_of_two(int value) {
   return out;
 }
 
+std::vector<std::string> generated_files(const std::filesystem::path& out_dir) {
+  std::vector<std::string> names;
+  std::error_code ec;
+  for (std::filesystem::recursive_directory_iterator it(out_dir, ec), end;
+       it != end; it.increment(ec)) {
+    if (ec) break;
+    if (!it->is_regular_file()) continue;
+    std::string name = file::to_utf8(
+        std::filesystem::relative(it->path(), out_dir, ec));
+    std::replace(name.begin(), name.end(), '\\', '/');
+    if (name == "manifest.json" || name == "debug_inputs.json") continue;
+    names.push_back(std::move(name));
+  }
+  std::sort(names.begin(), names.end());
+  return names;
+}
+
 bool write_generated(const std::filesystem::path& out_dir, const std::string& profile,
                      const std::filesystem::path& profile_dir, const InputManifest& inputs,
                      const std::vector<ExtractedBlock>& blocks, size_t sprite_count,
@@ -547,7 +565,7 @@ bool write_generated(const std::filesystem::path& out_dir, const std::string& pr
   // ---- blocks.json (schema v2) ------------------------------------------
   Json blocks_json;
   blocks_json["schema"] = "reim.blocks";
-  blocks_json["format"] = 2;
+  blocks_json["format"] = 3;
   blocks_json["profile"] = profile;
   blocks_json["abi_version"] = REIM_ABI_VERSION;
   blocks_json["source"] = "client.jar:assets/minecraft/blockstates + models + textures";
@@ -598,27 +616,39 @@ bool write_generated(const std::filesystem::path& out_dir, const std::string& pr
     return false;
   }
 
-  // ---- extraction report (schema v2) ------------------------------------
+  // ---- M3-K2..K9: schema v3 data -----------------------------------------
+  V3Summary v3;
+  if (!augment_generated_v3(out_dir, profile, profile_dir, v3, error)) {
+    log_error("extract: " + error);
+    return false;
+  }
+
+  // ---- extraction report (schema v3) ------------------------------------
   Json report;
   report["schema"] = "reim.extraction_report";
-  report["format"] = 2;
+  report["format"] = 3;
   report["profile"] = profile;
-  report["source"] = "client.jar:assets/minecraft/blockstates + models + textures";
-  const auto reports_dir = profile_dir / "reports";
+  report["source"] = "client.jar assets (visuals) + reports + server datapack "
+                     "(schema v3; see coverage_report.json)";
+  const auto reports_dir = profile_dir / "reports" / "reports";
   const bool reports_available = file::is_directory(reports_dir);
   report["reports"] = Json{{"available", reports_available},
-                           {"path", "reports"},
+                           {"path", "reports/reports"},
                            {"reason", reports_available
-                                          ? "existing reports directory found"
-                                          : "no reports directory in the profile input; "
-                                            "the Minecraft data generator was not started "
-                                            "(this environment forbids starting Minecraft/Java). "
-                                            "Block tables are derived from the real client.jar "
-                                            "assets instead; the reports gap is recorded here."}};
+                                          ? "official data generator reports ingested"
+                                          : "reports missing; run `reim-convert data`"}};
   report["counts"] = Json{{"blocks_total", blocks.size()},
                           {"blocks_full", full_blocks},
                           {"blocks_renderable", renderable},
-                          {"sprites", sprite_count}};
+                          {"sprites", sprite_count},
+                          {"block_states", v3.block_states},
+                          {"items", v3.items},
+                          {"entities", v3.entities},
+                          {"recipes", v3.recipes},
+                          {"loot_tables", v3.loot_tables},
+                          {"worldgen", v3.worldgen},
+                          {"sounds", v3.sounds},
+                          {"lang_entries", v3.lang_entries}};
   Json missing_json = Json::array();
   for (const std::string& value : missing_textures) missing_json.push_back(value);
   report["missing_textures"] = missing_json;
@@ -634,18 +664,24 @@ bool write_generated(const std::filesystem::path& out_dir, const std::string& pr
     return false;
   }
 
-  // ---- manifest (schema v2) ---------------------------------------------
+  // ---- manifest (schema v3) ---------------------------------------------
   // Absolute input paths live only in debug_inputs.json (local diagnostics),
   // never in manifest.json, so the manifest hash is machine independent.
+  Json data_report;
+  std::string data_report_error;
+  const bool has_data_report =
+      read_json_file(profile_dir / "data_report.json", data_report, data_report_error);
   Json manifest;
   manifest["schema"] = "reim.generated.manifest";
-  manifest["format"] = 2;
+  manifest["format"] = 3;
+  manifest["schema_version"] = 3;
   manifest["profile"] = profile;
   manifest["abi_version"] = REIM_ABI_VERSION;
   manifest["tool"] = "reim-convert";
-  manifest["tool_version"] = "1.0.0-m2";
+  manifest["tool_version"] = "1.0.0-m3";
   manifest["capabilities"] = Json::array(
-      {"frame_blob", "interpolation", "atlas_asset", "r0"});
+      {"frame_blob", "interpolation", "atlas_asset", "r0", "r1", "r2",
+       "ui", "audio", "save", "entities", "data_v3"});
   manifest["inputs"] = Json{
       {"client_jar_sha256", inputs.client_jar_sha256},
       {"client_jar_size", inputs.client_jar_size},
@@ -653,11 +689,32 @@ bool write_generated(const std::filesystem::path& out_dir, const std::string& pr
       {"version_json_size", inputs.version_json_size},
       {"asset_index_sha256", inputs.asset_index_sha256},
       {"asset_index_size", inputs.asset_index_size}};
+  if (has_data_report) {
+    manifest["inputs"]["server_jar_sha256"] =
+        data_report["server_jar"].value("sha256", "");
+    manifest["inputs"]["reports_blocks_sha256"] =
+        data_report["reports"].value("blocks_sha256", "");
+    manifest["inputs"]["datapack_digest"] =
+        data_report["datapack"].value("digest", "");
+    manifest["inputs"]["assets_digest"] =
+        data_report["assets"].value("digest", "");
+  }
+  manifest["sources"] = v3.coverage.value("sources", Json::object());
   manifest["counts"] = Json{{"blocks_total", blocks.size()},
                             {"blocks_full", full_blocks},
                             {"blocks_renderable", renderable},
                             {"sprites", sprite_count},
-                            {"missing_textures", missing_textures.size()}};
+                            {"missing_textures", missing_textures.size()},
+                            {"block_states", v3.block_states},
+                            {"items", v3.items},
+                            {"entities", v3.entities},
+                            {"models", v3.models},
+                            {"recipes", v3.recipes},
+                            {"loot_tables", v3.loot_tables},
+                            {"tags", v3.tags},
+                            {"worldgen", v3.worldgen},
+                            {"sound_events", v3.sounds},
+                            {"lang_entries", v3.lang_entries}};
   manifest["atlas"] = Json{{"file", "atlas.png"},
                            {"width", atlas_width},
                            {"height", atlas_height},
@@ -673,9 +730,8 @@ bool write_generated(const std::filesystem::path& out_dir, const std::string& pr
                             {"tint_kinds", Json::array({"grass", "foliage", "water"})}};
 
   Json generated = Json::array();
-  for (const char* name : {"atlas.png", "blocks.json", "textures.json",
-                           "biome_tints.json", "extraction_report.json"}) {
-    const auto path = out_dir / name;
+  for (const std::string& name : generated_files(out_dir)) {
+    const auto path = out_dir / file::from_utf8(name);
     file::Bytes bytes;
     if (!file::read_all(path, bytes, error)) {
       log_error(error);

@@ -1,0 +1,190 @@
+{
+  "id": "INT-08",
+  "description": "Select-slot and wheel update the Runtime hotbar selection",
+  "spawn": [
+    16.5,
+    100.0,
+    80.5
+  ],
+  "spawn_yaw": 0.0,
+  "spawn_pitch": 90.0,
+  "render_distance": 2,
+  "ui_canvas": [
+    1280,
+    720,
+    2
+  ],
+  "timeout_ms": 30000,
+  "setup": [
+    {
+      "action": "clear_inventory"
+    },
+    {
+      "action": "set_block",
+      "x": 15,
+      "y": 99,
+      "z": 79,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 15,
+      "y": 99,
+      "z": 80,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 15,
+      "y": 99,
+      "z": 81,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 16,
+      "y": 99,
+      "z": 79,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 16,
+      "y": 99,
+      "z": 80,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 16,
+      "y": 99,
+      "z": 81,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 17,
+      "y": 99,
+      "z": 79,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 17,
+      "y": 99,
+      "z": 80,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 17,
+      "y": 99,
+      "z": 81,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 15,
+      "y": 98,
+      "z": 79,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 15,
+      "y": 98,
+      "z": 80,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 15,
+      "y": 98,
+      "z": 81,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 16,
+      "y": 98,
+      "z": 79,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 16,
+      "y": 98,
+      "z": 80,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 16,
+      "y": 98,
+      "z": 81,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 17,
+      "y": 98,
+      "z": 79,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 17,
+      "y": 98,
+      "z": 80,
+      "block": "minecraft:stone"
+    },
+    {
+      "action": "set_block",
+      "x": 17,
+      "y": 98,
+      "z": 81,
+      "block": "minecraft:stone"
+    }
+  ],
+  "probes": [],
+  "steps": [
+    {
+      "wait_ticks": 3
+    },
+    {
+      "action": {
+        "type": "select_slot",
+        "screen": 2,
+        "a": 4
+      }
+    },
+    {
+      "wait_ticks": 2
+    },
+    {
+      "action": {
+        "type": "wheel",
+        "screen": 2,
+        "wheel": 1.0
+      }
+    },
+    {
+      "wait_ticks": 3
+    },
+    {
+      "fetch_frames": 2
+    }
+  ],
+  "assert": [
+    {
+      "type": "status_equals",
+      "path": "gameplay.selected_slot",
+      "value": 5
+    },
+    {
+      "type": "status_at_least",
+      "path": "actions.wheel",
+      "value": 1
+    }
+  ]
+}

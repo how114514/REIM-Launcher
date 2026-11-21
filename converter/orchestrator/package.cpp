@@ -136,11 +136,11 @@ std::optional<Json> read_adapter(const std::filesystem::path& adapter_dir, Json&
   const int abi = out.value("abi_version", 0);
   const int render = out.value("render_level", -1);
   const std::string ue = out.value("ue_version", std::string());
-  if (format != 2 || abi != static_cast<int>(REIM_ABI_VERSION) || render != 0 ||
-      ue != "5.8.4") {
+  if (format != 3 || abi != static_cast<int>(REIM_ABI_VERSION) || render < 0 ||
+      render > 2 || ue != "5.8.4") {
     error = std::format(
         "ue_adapter.json rejected: format={} abi={} render_level={} ue_version='{}' "
-        "(need 2/{}/0/5.8.4)",
+        "(need 3/{}/0..2/5.8.4)",
         format, abi, render, ue, REIM_ABI_VERSION);
     return std::nullopt;
   }
@@ -187,8 +187,20 @@ int run_package(const Args& args, const std::filesystem::path&) {
   reim::data::GeneratedManifest manifest;
   if (!reim::data::validate_generated(generated_dir, profile, REIM_ABI_VERSION, manifest,
                                       error)) {
-    log_error("package: generated data rejected: " + error);
-    return 3;
+    /* Phase-1 bridge (M3_PLAN 6.8): M2 Converter data is still ABI 2 until
+     * M3-K7. The v3 Runtime accepts that exact layout, so packaging may bind
+     * it, with a warning; it is never labelled schema v3. */
+    reim::data::GeneratedManifest legacy;
+    std::string legacy_error;
+    if (profile == "26.3" && reim::data::validate_generated(
+                                 generated_dir, profile, 2u, legacy, legacy_error)) {
+      manifest = legacy;
+      log_warn("package: generated data is legacy ABI 2; packaged with a v3 "
+               "runtime (Converter schema v3 arrives in M3-K7)");
+    } else {
+      log_error("package: generated data rejected: " + error);
+      return 3;
+    }
   }
   log_info(std::format("package: generated manifest OK (format {}, ABI {}, {} files, "
                        "{} blocks)",

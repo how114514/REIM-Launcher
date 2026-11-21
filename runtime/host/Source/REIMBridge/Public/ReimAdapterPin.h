@@ -12,7 +12,7 @@
 #pragma once
 
 #define REIM_ADAPTER_ID "reim-ue-adapter"
-#define REIM_ADAPTER_VERSION "1.0.0-r0"
+#define REIM_ADAPTER_VERSION "1.0.0-m3-r0"
 #define REIM_ADAPTER_UE_VERSION "5.8.4"
-#define REIM_ADAPTER_ABI_VERSION 2u
+#define REIM_ADAPTER_ABI_VERSION 3u
 #define REIM_ADAPTER_RENDER_LEVEL 0u

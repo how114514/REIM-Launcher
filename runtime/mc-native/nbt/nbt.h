@@ -73,6 +73,14 @@ struct Document {
 bool parse(const uint8_t* data, size_t size, Document& out, std::string& error);
 bool parse(const std::vector<uint8_t>& data, Document& out, std::string& error);
 
+/* Serializes the decoded tree back to big-endian NBT. The document preserves
+ * every parsed tag type and value, so an unmodified round trip is
+ * semantically identical (unknown fields included). Returns false with a
+ * readable message for structurally invalid trees (for example a list whose
+ * element type does not match its items). */
+bool write(const Document& document, std::vector<uint8_t>& out,
+           std::string& error);
+
 /* Reads `path`, detects gzip/zlib by header, decompresses if needed, then
  * parses. Used for level.dat and for debugging NBT files. */
 bool parse_file(const std::filesystem::path& path, Document& out, std::string& error);

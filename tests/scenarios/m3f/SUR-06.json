@@ -1,0 +1,24 @@
+{
+  "id": "SUR-06",
+  "description": "Regeneration: a well-fed player regains health",
+  "spawn": [16.5, 100.0, 80.5],
+  "spawn_yaw": 0.0,
+  "spawn_pitch": 90.0,
+  "render_distance": 2,
+  "ui_canvas": [1280, 720, 2],
+  "timeout_ms": 30000,
+  "setup": [
+    { "action": "clear_inventory" },
+    { "action": "platform", "x": 16, "y": 99, "z": 80, "radius": 1 },
+    { "action": "set_health", "value": 10.0 },
+    { "action": "set_food", "value": 20.0 }
+  ],
+  "steps": [
+    { "wait_ticks": 100 },
+    { "fetch_frames": 2 }
+  ],
+  "assert": [
+    { "type": "player_health_at_least", "value": 11.0 },
+    { "type": "player_food_at_most", "value": 20.0 }
+  ]
+}

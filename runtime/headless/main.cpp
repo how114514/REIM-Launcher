@@ -37,10 +37,17 @@ struct Options {
   double seconds = 0.0;
   double timeout_seconds = 120.0;
   uint32_t render_distance = 6;
+  uint32_t ui_width = 1280;
+  uint32_t ui_height = 720;
+  float ui_scale = 2.0f;
+  bool ui_spike = false;
+  bool channel_spike = false;
   bool spawn_override = false;
   float spawn_x = 0.0f;
   float spawn_y = 0.0f;
   float spawn_z = 0.0f;
+  bool create_world = false;
+  uint64_t seed = 0;
   bool headless = false;
   bool help = false;
   bool version = false;
@@ -68,7 +75,12 @@ void print_usage() {
       "  --minecraft-dir PATH     optional, recorded for diagnostics\n"
       "  --dll PATH               mc_26.3.dll (default: beside this exe)\n"
       "  --render-distance N      chunk radius, default 6\n"
+      "  --ui-canvas W H SCALE    UI canvas pixels and integer scale (default 1280 720 2)\n"
+      "  --ui-spike               publish the A5 UI test screen\n"
+      "  --channel-spike          publish one box entity and one UI sound event\n"
       "  --spawn X Y Z            override the level.dat spawn (diagnostics)\n"
+      "  --create-world           generate a new in-memory world at --world\n"
+      "  --seed N                 world seed for --create-world\n"
       "  --ticks N                run until the runtime reaches tick N\n"
       "  --seconds N              run for N wall-clock seconds\n"
       "  --timeout N              abort after N seconds (default 120)\n"
@@ -109,6 +121,17 @@ bool parse_options(int argc, char** argv, Options& options) {
       if (!next(value)) return false;
       options.render_distance =
           static_cast<uint32_t>((std::max)(1, std::atoi(value.c_str())));
+    } else if (arg == "--ui-spike") {
+      options.ui_spike = true;
+    } else if (arg == "--channel-spike") {
+      options.channel_spike = true;
+    } else if (arg == "--ui-canvas") {
+      std::string w, h, scale;
+      if (!next(w) || !next(h) || !next(scale)) return false;
+      options.ui_width = static_cast<uint32_t>((std::max)(64, std::atoi(w.c_str())));
+      options.ui_height = static_cast<uint32_t>((std::max)(64, std::atoi(h.c_str())));
+      options.ui_scale = static_cast<float>(std::atof(scale.c_str()));
+      if (options.ui_scale <= 0.0f) options.ui_scale = 2.0f;
     } else if (arg == "--spawn") {
       std::string x, y, z;
       if (!next(x) || !next(y) || !next(z)) return false;
@@ -116,6 +139,12 @@ bool parse_options(int argc, char** argv, Options& options) {
       options.spawn_x = static_cast<float>(std::atof(x.c_str()));
       options.spawn_y = static_cast<float>(std::atof(y.c_str()));
       options.spawn_z = static_cast<float>(std::atof(z.c_str()));
+    } else if (arg == "--create-world") {
+      options.create_world = true;
+    } else if (arg == "--seed") {
+      std::string value;
+      if (!next(value)) return false;
+      options.seed = std::strtoull(value.c_str(), nullptr, 10);
     } else {
       std::fprintf(stderr, "unknown argument: %s\n", arg.c_str());
       return false;
@@ -162,7 +191,7 @@ int main(int argc, char** argv) {
     return 0;
   }
   if (options.version) {
-    std::printf("reim-headless S3 (ABI %u)\n", REIM_ABI_VERSION);
+    std::printf("reim-headless M3-S1 (ABI %u)\n", REIM_ABI_VERSION);
     return 0;
   }
   if (options.world.empty() || options.generated.empty()) {
@@ -224,11 +253,16 @@ int main(int argc, char** argv) {
   config.minecraft_dir = options.minecraft_dir.empty() ? nullptr : minecraft_path.c_str();
   config.render_distance = options.render_distance;
   config.flags = options.spawn_override ? REIM_CONFIG_FLAG_SPAWN_OVERRIDE : 0u;
+  if (options.ui_spike) config.flags |= REIM_CONFIG_FLAG_UI_SPIKE;
+  if (options.channel_spike) config.flags |= REIM_CONFIG_FLAG_CHANNEL_SPIKE;
   config.mouse_sensitivity = 0.15f;
   config.invert_y = 0;
   config.spawn_x = options.spawn_x;
   config.spawn_y = options.spawn_y;
   config.spawn_z = options.spawn_z;
+  config.ui_scale = static_cast<uint32_t>(options.ui_scale);
+  config.create_world = options.create_world ? 1u : 0u;
+  config.seed = options.seed;
 
   int32_t error = 0;
   ReimInstance* instance = api->create(&config, &host, &error);
@@ -238,6 +272,11 @@ int main(int argc, char** argv) {
     ::FreeLibrary(module);
 #endif
     return 6;
+  }
+
+  if (api->set_ui_canvas != nullptr) {
+    api->set_ui_canvas(instance, options.ui_width, options.ui_height,
+                       options.ui_scale);
   }
 
   const int32_t started = api->start(instance);
@@ -258,6 +297,14 @@ int main(int argc, char** argv) {
   uint64_t removes_seen = 0;
   uint64_t vertices_seen = 0;
   uint64_t indices_seen = 0;
+  uint32_t last_ui_draws = 0;
+  uint32_t last_ui_screen = 0;
+  uint32_t last_ui_hovered = 0;
+  uint32_t last_ui_hovered_slot = REIM_UI_SLOT_NONE;
+  uint32_t last_ui_selected = 0;
+  uint32_t last_entities = 0;
+  uint32_t last_particles = 0;
+  uint32_t last_audio = 0;
   bool ready = false;
   bool timed_out = false;
   bool failed = false;
@@ -280,6 +327,14 @@ int main(int argc, char** argv) {
       vertices_seen += frame.updates[i].vertex_count;
       indices_seen += frame.updates[i].index_count;
     }
+    last_ui_draws = frame.ui.draw_count;
+    last_ui_screen = frame.ui.screen_id;
+    last_ui_hovered = frame.ui.hovered_element;
+    last_ui_hovered_slot = frame.ui.hovered_slot;
+    last_ui_selected = frame.ui.inventory.selected_slot;
+    last_entities = frame.entity_count;
+    last_particles = frame.particle_count;
+    last_audio = frame.audio_count;
     api->release_frame(instance, frame.frame_id);
     last.updates = nullptr;
     last.removes = nullptr;
@@ -314,7 +369,7 @@ int main(int argc, char** argv) {
 
   std::string report;
   report += "{\n";
-  report += "  \"stage\": \"S3-headless\",\n";
+  report += "  \"stage\": \"M3-S1-headless\",\n";
   report += std::string("  \"ready\": ") + (ready ? "true" : "false") + ",\n";
   report += std::string("  \"timed_out\": ") + (timed_out ? "true" : "false") + ",\n";
   report += std::string("  \"failed\": ") + (failed ? "true" : "false") + ",\n";
@@ -338,12 +393,24 @@ int main(int argc, char** argv) {
   report += "    \"measured_tps\": " + std::to_string(last.measured_tps) + ",\n";
   report += "    \"update_count\": " + std::to_string(last.update_count) + ",\n";
   report += "    \"remove_count\": " + std::to_string(last.remove_count) + ",\n";
+  report += "    \"ui\": {\"draws\": " + std::to_string(last_ui_draws) +
+            ", \"screen\": " + std::to_string(last_ui_screen) +
+            ", \"hovered_element\": " + std::to_string(last_ui_hovered) +
+            ", \"hovered_slot\": " + std::to_string(last_ui_hovered_slot) +
+            ", \"selected_slot\": " + std::to_string(last_ui_selected) + "},\n";
+  report += "    \"entities\": " + std::to_string(last_entities) +
+            ", \"particles\": " + std::to_string(last_particles) +
+            ", \"audio_events\": " + std::to_string(last_audio) + ",\n";
   report += "    \"player\": {\"x\": " + std::to_string(last.player.position.x) +
             ", \"y\": " + std::to_string(last.player.position.y) +
             ", \"z\": " + std::to_string(last.player.position.z) +
             ", \"yaw\": " + std::to_string(last.player.yaw) +
             ", \"pitch\": " + std::to_string(last.player.pitch) +
-            ", \"flags\": " + std::to_string(last.player.flags) + "}\n";
+            ", \"flags\": " + std::to_string(last.player.flags) +
+            ", \"health\": " + std::to_string(last.player.health) +
+            ", \"food\": " + std::to_string(last.player.food) +
+            ", \"selected_slot\": " + std::to_string(last.player.selected_slot) +
+            "}\n";
   report += "  },\n";
   report += "  \"status\": " + status_text + "\n";
   report += "}\n";

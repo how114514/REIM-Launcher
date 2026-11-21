@@ -1,0 +1,30 @@
+{
+  "id": "SUR-07",
+  "description": "Death and respawn: death screen, then RESPAWN restores the player at spawn",
+  "spawn": [16.5, 100.0, 80.5],
+  "spawn_yaw": 0.0,
+  "spawn_pitch": 90.0,
+  "render_distance": 2,
+  "ui_canvas": [1280, 720, 2],
+  "timeout_ms": 30000,
+  "setup": [
+    { "action": "clear_inventory" },
+    { "action": "platform", "x": 16, "y": 99, "z": 80, "radius": 1 },
+    { "action": "give", "item": "minecraft:bread", "count": 3 },
+    { "action": "damage_player", "amount": 25.0, "cause": "mob" }
+  ],
+  "steps": [
+    { "wait_ticks": 3 },
+    { "fetch_frames": 1 },
+    { "action": { "type": "respawn" } },
+    { "wait_ticks": 4 },
+    { "fetch_frames": 2 }
+  ],
+  "assert": [
+    { "type": "player_dead_equals", "value": false },
+    { "type": "screen_equals", "value": 2 },
+    { "type": "player_health_at_least", "value": 20.0 },
+    { "type": "status_at_least", "path": "gameplay.survival.deaths", "value": 1 },
+    { "type": "status_at_least", "path": "gameplay.counters.items_dropped", "value": 3 }
+  ]
+}

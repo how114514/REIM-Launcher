@@ -1,0 +1,17 @@
+{
+  "m3": [
+    {
+      "id": 1,
+      "event": "ui.button.click",
+      "category": 6,
+      "files": [
+        {
+          "path": "minecraft/sounds/custom/click.ogg",
+          "local": true,
+          "volume": 1.0,
+          "pitch": 1.0
+        }
+      ]
+    }
+  ]
+}

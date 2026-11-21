@@ -438,4 +438,143 @@ const char* tag_name(Tag tag) {
   return "unknown";
 }
 
+namespace {
+
+struct Writer {
+  std::vector<uint8_t>& out;
+  std::string& error;
+
+  void u8(uint8_t value) { out.push_back(value); }
+  void be16(uint16_t value) {
+    out.push_back(static_cast<uint8_t>(value >> 8));
+    out.push_back(static_cast<uint8_t>(value));
+  }
+  void be32(uint32_t value) {
+    out.push_back(static_cast<uint8_t>(value >> 24));
+    out.push_back(static_cast<uint8_t>(value >> 16));
+    out.push_back(static_cast<uint8_t>(value >> 8));
+    out.push_back(static_cast<uint8_t>(value));
+  }
+  void be64(uint64_t value) {
+    for (int shift = 56; shift >= 0; shift -= 8) {
+      out.push_back(static_cast<uint8_t>(value >> shift));
+    }
+  }
+  void text(const std::string& value) {
+    be16(static_cast<uint16_t>(value.size()));
+    out.insert(out.end(), value.begin(), value.end());
+  }
+};
+
+bool write_payload(Writer& writer, Tag tag, const Value& value,
+                   std::string& error) {
+  if (tag != value.type) {
+    error = std::string("value type ") + tag_name(value.type) +
+            " does not match declared tag " + tag_name(tag);
+    return false;
+  }
+  switch (tag) {
+    case Tag::end:
+      error = "TAG_End cannot be written as a payload";
+      return false;
+    case Tag::byte:
+      writer.u8(static_cast<uint8_t>(value.integral));
+      return true;
+    case Tag::short_tag:
+      writer.be16(static_cast<uint16_t>(value.integral));
+      return true;
+    case Tag::int_tag:
+      writer.be32(static_cast<uint32_t>(value.integral));
+      return true;
+    case Tag::long_tag:
+      writer.be64(static_cast<uint64_t>(value.integral));
+      return true;
+    case Tag::float_tag: {
+      const float number = static_cast<float>(value.real);
+      uint32_t bits = 0;
+      std::memcpy(&bits, &number, sizeof(bits));
+      writer.be32(bits);
+      return true;
+    }
+    case Tag::double_tag: {
+      const double number = value.real;
+      uint64_t bits = 0;
+      std::memcpy(&bits, &number, sizeof(bits));
+      writer.be64(bits);
+      return true;
+    }
+    case Tag::byte_array:
+      writer.be32(static_cast<uint32_t>(value.bytes.size()));
+      writer.out.insert(writer.out.end(), value.bytes.begin(), value.bytes.end());
+      return true;
+    case Tag::string:
+      writer.text(value.text);
+      return true;
+    case Tag::list: {
+      if (!value.list) {
+        error = "list value has no payload";
+        return false;
+      }
+      writer.u8(static_cast<uint8_t>(value.list->element_type));
+      writer.be32(static_cast<uint32_t>(value.list->items.size()));
+      for (const Value& item : value.list->items) {
+        if (!write_payload(writer, value.list->element_type, item, error)) {
+          return false;
+        }
+      }
+      return true;
+    }
+    case Tag::compound: {
+      if (!value.compound) {
+        error = "compound value has no payload";
+        return false;
+      }
+      for (const auto& [name, child] : *value.compound) {
+        if (child.type == Tag::end) {
+          error = "compound member '" + name + "' has no type";
+          return false;
+        }
+        writer.u8(static_cast<uint8_t>(child.type));
+        writer.text(name);
+        if (!write_payload(writer, child.type, child, error)) return false;
+      }
+      writer.u8(static_cast<uint8_t>(Tag::end));
+      return true;
+    }
+    case Tag::int_array:
+      writer.be32(static_cast<uint32_t>(value.ints.size()));
+      for (int32_t number : value.ints) {
+        writer.be32(static_cast<uint32_t>(number));
+      }
+      return true;
+    case Tag::long_array:
+      writer.be32(static_cast<uint32_t>(value.longs.size()));
+      for (int64_t number : value.longs) {
+        writer.be64(static_cast<uint64_t>(number));
+      }
+      return true;
+  }
+  error = "unknown tag type";
+  return false;
+}
+
+} // namespace
+
+bool write(const Document& document, std::vector<uint8_t>& out,
+           std::string& error) {
+  out.clear();
+  if (document.root.type == Tag::end) {
+    error = "root tag has no type";
+    return false;
+  }
+  Writer writer{out, error};
+  writer.u8(static_cast<uint8_t>(document.root.type));
+  writer.text(document.root_name);
+  if (!write_payload(writer, document.root.type, document.root, error)) {
+    out.clear();
+    return false;
+  }
+  return true;
+}
+
 } // namespace reim::nbt

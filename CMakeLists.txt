@@ -82,6 +82,7 @@ add_subdirectory(runtime/contract)
 add_subdirectory(runtime/mc-native)
 add_subdirectory(runtime/headless)
 add_subdirectory(runtime/preview)
+add_subdirectory(runtime/scenario)
 add_subdirectory(converter/java-analyzer)
 add_subdirectory(converter/orchestrator)
 

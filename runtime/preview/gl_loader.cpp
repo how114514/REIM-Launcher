@@ -4,6 +4,7 @@
 #include <GLFW/glfw3.h>
 
 void (REIM_GL_API* glClear)(GLbitfield) = nullptr;
+GLenum (REIM_GL_API* glGetError)(void) = nullptr;
 void (REIM_GL_API* glClearColor)(GLfloat, GLfloat, GLfloat, GLfloat) = nullptr;
 void (REIM_GL_API* glViewport)(GLint, GLint, GLsizei, GLsizei) = nullptr;
 void (REIM_GL_API* glEnable)(GLenum) = nullptr;
@@ -13,6 +14,7 @@ void (REIM_GL_API* glDepthMask)(GLboolean) = nullptr;
 void (REIM_GL_API* glBlendFunc)(GLenum, GLenum) = nullptr;
 void (REIM_GL_API* glCullFace)(GLenum) = nullptr;
 void (REIM_GL_API* glFrontFace)(GLenum) = nullptr;
+void (REIM_GL_API* glScissor)(GLint, GLint, GLsizei, GLsizei) = nullptr;
 void (REIM_GL_API* glPolygonMode)(GLenum, GLenum) = nullptr;
 void (REIM_GL_API* glLineWidth)(GLfloat) = nullptr;
 const GLubyte* (REIM_GL_API* glGetString)(GLenum) = nullptr;
@@ -79,6 +81,7 @@ namespace {
 
 bool load_gl_functions(std::string& error) {
   REIM_LOAD_GL(glClear);
+  REIM_LOAD_GL(glGetError);
   REIM_LOAD_GL(glClearColor);
   REIM_LOAD_GL(glViewport);
   REIM_LOAD_GL(glEnable);
@@ -88,6 +91,7 @@ bool load_gl_functions(std::string& error) {
   REIM_LOAD_GL(glBlendFunc);
   REIM_LOAD_GL(glCullFace);
   REIM_LOAD_GL(glFrontFace);
+  REIM_LOAD_GL(glScissor);
   REIM_LOAD_GL(glPolygonMode);
   REIM_LOAD_GL(glLineWidth);
   REIM_LOAD_GL(glGetString);

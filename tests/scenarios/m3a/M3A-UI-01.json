@@ -1,0 +1,22 @@
+{
+  "id": "M3A-UI-01",
+  "description": "A5 display list: rect, textured quad, glyphs, clip, item icon, 36-slot inventory snapshot",
+  "flags": ["ui_spike"],
+  "ui_canvas": [1280, 720, 2],
+  "timeout_ms": 20000,
+  "steps": [
+    { "wait_ticks": 3 },
+    { "fetch_frames": 3 }
+  ],
+  "assert": [
+    { "type": "status_equals", "path": "ui.spike", "value": true },
+    { "type": "status_equals", "path": "ui.screen", "value": 2 },
+    { "type": "ui_min_draws", "value": 1 },
+    { "type": "ui_kind", "value": "rect" },
+    { "type": "ui_kind", "value": "textured_quad" },
+    { "type": "ui_kind", "value": "glyph_quad" },
+    { "type": "ui_has_clip" },
+    { "type": "ui_has_item_icon" },
+    { "type": "ui_slots", "value": 36 }
+  ]
+}

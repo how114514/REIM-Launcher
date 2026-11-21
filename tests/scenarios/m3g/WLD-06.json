@@ -1,0 +1,21 @@
+{
+  "id": "WLD-06",
+  "description": "Time and weather: debug controls drive environment snapshots",
+  "create_world": true,
+  "seed": 12345,
+  "render_distance": 2,
+  "ui_canvas": [1280, 720, 2],
+  "timeout_ms": 40000,
+  "steps": [
+    { "wait_ticks": 5 },
+    { "action": { "type": "debug_set_time", "a": 18000 } },
+    { "action": { "type": "debug_set_weather", "a": 2 } },
+    { "wait_ticks": 5 },
+    { "fetch_frames": 2 }
+  ],
+  "assert": [
+    { "type": "status_at_least", "path": "world.time_of_day", "value": 18000 },
+    { "type": "status_equals", "path": "world.weather", "value": 2 },
+    { "type": "status_at_least", "path": "world.sky_darken", "value": 0.9 }
+  ]
+}

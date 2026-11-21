@@ -1,0 +1,21 @@
+{
+  "id": "MOB-10",
+  "description": "Natural spawning: an enabled spawner adds mobs in a generated world",
+  "create_world": true,
+  "seed": 12345,
+  "render_distance": 3,
+  "ui_canvas": [1280, 720, 2],
+  "timeout_ms": 60000,
+  "setup": [
+    { "action": "clear_inventory" },
+    { "action": "natural_spawn", "enabled": true }
+  ],
+  "steps": [
+    { "wait_ticks": 120 },
+    { "fetch_frames": 2 }
+  ],
+  "assert": [
+    { "type": "status_at_least", "path": "gameplay.counters.mobs_spawned", "value": 1 },
+    { "type": "entity_count_at_least", "value": 1 }
+  ]
+}

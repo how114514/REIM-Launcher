@@ -3,6 +3,7 @@ add_executable(REIMPreview
   gl_loader.cpp
   gl_renderer.cpp
   hud.cpp
+  ui_canvas.cpp
   render_math.cpp
 )
 target_link_libraries(REIMPreview PRIVATE

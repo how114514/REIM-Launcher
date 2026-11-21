@@ -123,7 +123,7 @@ def build(repo: Path, pin_path: Path) -> dict:
 
     return {
         "schema": "reim.ue_adapter",
-        "format": 2,
+        "format": 3,
         "adapter_id": pin["adapter_id"],
         "adapter_version": pin["adapter_version"],
         "ue_version": pin["ue_version"],

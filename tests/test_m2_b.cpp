@@ -172,7 +172,8 @@ TEST_CASE("M2-B create rejects unsupported render level and missing allocator") 
   config.struct_size = sizeof(config);
   config.abi_version = REIM_ABI_VERSION;
   config.generated_path = generated.c_str();
-  config.render_level = 1;
+  /* M3-J8 negotiates R0/R1/R2; only values above 2 are rejected. */
+  config.render_level = 3;
 
   ReimHostApi host{};
   host.struct_size = sizeof(host);
@@ -229,7 +230,7 @@ TEST_CASE("M2-B frame ownership, backpressure, interpolation and assets") {
     const void* png = nullptr;
     uint64_t png_size = 0;
     uint64_t png_revision = 0;
-    REQUIRE(fixture.api->get_asset(fixture.instance, REIM_ASSET_ATLAS_PNG, &png,
+    REQUIRE(fixture.api->get_asset(fixture.instance, REIM_ASSET_ATLAS_PNG, 0, &png,
                                    &png_size, &png_revision) == REIM_OK);
     REQUIRE(png != nullptr);
     REQUIRE(png_size > 8);
@@ -241,7 +242,7 @@ TEST_CASE("M2-B frame ownership, backpressure, interpolation and assets") {
     const void* meta = nullptr;
     uint64_t meta_size = 0;
     uint64_t meta_revision = 0;
-    REQUIRE(fixture.api->get_asset(fixture.instance, REIM_ASSET_ATLAS_META, &meta,
+    REQUIRE(fixture.api->get_asset(fixture.instance, REIM_ASSET_ATLAS_META, 0, &meta,
                                    &meta_size, &meta_revision) == REIM_OK);
     REQUIRE(meta != nullptr);
     const std::string meta_text(static_cast<const char*>(meta),

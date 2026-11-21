@@ -137,6 +137,8 @@
 
 **验收**：未安装 UE 的干净机，只装 VC++ 运行库，从 Launcher 安装/启动/进入世界/退出。
 
+**M3 阶段 5 实测**：Shipping RC 在指定开发机启动/进入真实存档/退出，R0 世界渲染与 Bridge 自动化通过；干净机 `not_run`（无机器）。UE Adapter descriptor 为 format 3 / ABI 3；R1/R2、UI、实体、音频仍为 Host 未实现项，不随本兼容声明通过。
+
 ---
 
 ## 8. 原生化支持矩阵（按子系统）

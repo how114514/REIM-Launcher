@@ -78,6 +78,7 @@ typedef void GLvoid;
 #define GL_ARRAY_BUFFER 0x8892
 #define GL_ELEMENT_ARRAY_BUFFER 0x8893
 #define GL_STATIC_DRAW 0x88E4
+#define GL_STREAM_DRAW 0x88E0
 #define GL_DYNAMIC_DRAW 0x88E8
 #define GL_FRAGMENT_SHADER 0x8B30
 #define GL_VERTEX_SHADER 0x8B31
@@ -89,6 +90,7 @@ typedef void GLvoid;
 
 /* OpenGL 1.1 (available from opengl32.dll; glfwGetProcAddress resolves it). */
 extern void (REIM_GL_API* glClear)(GLbitfield mask);
+extern GLenum (REIM_GL_API* glGetError)(void);
 extern void (REIM_GL_API* glClearColor)(GLfloat r, GLfloat g, GLfloat b, GLfloat a);
 extern void (REIM_GL_API* glViewport)(GLint x, GLint y, GLsizei w, GLsizei h);
 extern void (REIM_GL_API* glEnable)(GLenum cap);
@@ -98,6 +100,7 @@ extern void (REIM_GL_API* glDepthMask)(GLboolean flag);
 extern void (REIM_GL_API* glBlendFunc)(GLenum sfactor, GLenum dfactor);
 extern void (REIM_GL_API* glCullFace)(GLenum mode);
 extern void (REIM_GL_API* glFrontFace)(GLenum mode);
+extern void (REIM_GL_API* glScissor)(GLint x, GLint y, GLsizei w, GLsizei h);
 extern void (REIM_GL_API* glPolygonMode)(GLenum face, GLenum mode);
 extern void (REIM_GL_API* glLineWidth)(GLfloat width);
 extern const GLubyte* (REIM_GL_API* glGetString)(GLenum name);

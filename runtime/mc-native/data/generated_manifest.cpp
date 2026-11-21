@@ -143,14 +143,14 @@ bool validate_generated(const std::filesystem::path& generated_dir,
     return false;
   }
   if (!load_manifest(generated_dir, out, error)) return false;
-  if (out.format != 2) {
+  if (out.format != 3) {
     error = "generated manifest schema format " + std::to_string(out.format) +
-            " is not supported (ABI 2 requires format 2; re-run "
-            "`reim-convert extract`)";
+            " is not supported (ABI 3 requires format 3; run `reim-convert data` "
+            "then `reim-convert extract`)";
     return false;
   }
   if (out.atlas_sha256.empty() || out.atlas_meta_version != 2) {
-    error = "generated manifest is missing the v2 atlas descriptor; re-run "
+    error = "generated manifest is missing the atlas descriptor; re-run "
             "`reim-convert extract`";
     return false;
   }
@@ -164,7 +164,11 @@ bool validate_generated(const std::filesystem::path& generated_dir,
             ", runtime " + std::to_string(expected_abi_version);
     return false;
   }
-  for (const char* required : {"blocks.json", "textures.json", "atlas.png"}) {
+  for (const char* required : {"blocks.json", "textures.json", "atlas.png",
+                               "items.json", "entities.json", "models.json",
+                               "recipes.json", "loot_tables.json", "tags.json",
+                               "worldgen.json", "sounds.json", "lang.json",
+                               "coverage_report.json"}) {
     bool found = false;
     for (const GeneratedFile& entry : out.files) {
       if (entry.path == required) {

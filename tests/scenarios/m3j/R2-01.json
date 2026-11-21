@@ -1,0 +1,35 @@
+{
+  "id": "R2-01",
+  "description": "R2: breaking a block emits Runtime particles; render_level 2 is negotiated",
+  "spawn": [16.5, 100.0, 80.5],
+  "spawn_yaw": 0.0,
+  "spawn_pitch": 90.0,
+  "render_distance": 2,
+  "render_level": 2,
+  "ui_canvas": [1280, 720, 2],
+  "timeout_ms": 30000,
+  "setup": [
+    { "action": "clear_inventory" },
+    { "action": "give", "item": "minecraft:stone_pickaxe", "count": 1 },
+    { "action": "set_block", "x": 15, "y": 99, "z": 79, "block": "minecraft:stone" },
+    { "action": "set_block", "x": 16, "y": 99, "z": 79, "block": "minecraft:stone" },
+    { "action": "set_block", "x": 17, "y": 99, "z": 79, "block": "minecraft:stone" },
+    { "action": "set_block", "x": 15, "y": 99, "z": 80, "block": "minecraft:stone" },
+    { "action": "set_block", "x": 16, "y": 99, "z": 80, "block": "minecraft:stone" },
+    { "action": "set_block", "x": 17, "y": 99, "z": 80, "block": "minecraft:stone" },
+    { "action": "set_block", "x": 15, "y": 99, "z": 81, "block": "minecraft:stone" },
+    { "action": "set_block", "x": 16, "y": 99, "z": 81, "block": "minecraft:stone" },
+    { "action": "set_block", "x": 17, "y": 99, "z": 81, "block": "minecraft:stone" }
+  ],
+  "steps": [
+    { "wait_ticks": 3 },
+    { "action": { "type": "break_block", "x": 17.0, "y": 99.0, "z": 80.0 } },
+    { "wait_ticks": 6 },
+    { "fetch_frames": 2 }
+  ],
+  "assert": [
+    { "type": "status_equals", "path": "render_level", "value": 2 },
+    { "type": "particles_at_least", "value": 8 },
+    { "type": "audio_sound_seen", "value": 20 }
+  ]
+}

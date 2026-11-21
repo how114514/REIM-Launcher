@@ -24,4 +24,9 @@ bool load_file(const std::string& path_utf8, int desired_channels, Image& out,
 bool write_file(const std::string& path_utf8, int width, int height, int channels,
                 const uint8_t* pixels, std::string& error);
 
+/* Encodes in memory (RGBA8 or the given channel count). Used by get_asset for
+ * synthesized v3 assets such as the Runtime font atlas. */
+bool encode_memory(int width, int height, int channels, const uint8_t* pixels,
+                   std::vector<uint8_t>& out, std::string& error);
+
 } // namespace reim::png

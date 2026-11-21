@@ -1,0 +1,18 @@
+{
+  "id": "WLD-03",
+  "description": "Biome and surface: a fixed-seed coastal column reports its biome and top block",
+  "create_world": true,
+  "seed": 12345,
+  "render_distance": 2,
+  "ui_canvas": [1280, 720, 2],
+  "timeout_ms": 40000,
+  "probes": [[0, 65, 0]],
+  "steps": [
+    { "wait_ticks": 30 },
+    { "fetch_frames": 2 }
+  ],
+  "assert": [
+    { "type": "block_at", "x": 0, "y": 65, "z": 0, "state": "minecraft:sand" },
+    { "type": "biome_at", "x": 0, "y": 65, "z": 0, "value": "minecraft:plains" }
+  ]
+}

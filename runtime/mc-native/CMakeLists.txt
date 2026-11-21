@@ -6,20 +6,34 @@ add_library(reim_core STATIC
   util/zip.cpp
   util/png.cpp
   util/compression.cpp
+  asset/packs.cpp
   samples/packed_bits.cpp
   data/generated_manifest.cpp
   data/block_table.cpp
   nbt/nbt.cpp
   anvil/region.cpp
+  anvil/region_writer.cpp
   world/chunk.cpp
   world/level.cpp
   world/world.cpp
+  world/worldgen.cpp
+  world/block_edit.cpp
   mesh/section_mesh.cpp
   core/player.cpp
   core/simulation.cpp
+  game/item.cpp
+  game/inventory.cpp
+  game/recipes.cpp
+  game/survival.cpp
+  game/entity.cpp
+  game/particles.cpp
+  game/gameplay.cpp
+  game/slot_layout.cpp
+  ui/ui_spike.cpp
+  ui/game_ui.cpp
 )
 target_include_directories(reim_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
-target_link_libraries(reim_core PUBLIC reim_thirdparty reim_headers)
+target_link_libraries(reim_core PUBLIC reim_thirdparty reim_lz4 reim_headers)
 
 if(MSVC)
   # Core is shared by the DLL and offline tools. The DLL boundary itself never

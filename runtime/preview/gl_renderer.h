@@ -45,6 +45,12 @@ class Renderer {
    * diagnostic label used in the log line. */
   bool initialize_from_png(const uint8_t* data, size_t size,
                            const std::string& source, std::string& error);
+  /* M3-A6: cache Runtime model definitions (box parts + atlas UV). */
+  bool load_model_defs(const void* data, size_t size, std::string& error);
+  /* M3-J7: item icon atlas + item id -> icon name mapping for the held item. */
+  bool load_item_assets(const void* png, size_t png_size, const void* meta,
+                        size_t meta_size, const void* item_index,
+                        size_t item_index_size, std::string& error);
   void shutdown();
 
   /* Applies the frame's update/remove lists. Call once per fetch_frame. */
@@ -76,6 +82,10 @@ class Renderer {
   void remove_section(int32_t chunk_x, int32_t chunk_z, int32_t section_y);
   void draw_meshes(const std::vector<GpuMesh*>& meshes);
   void draw_player_box(const ReimRenderFrame& frame, const Mat4& view_proj);
+  void draw_entities(const ReimRenderFrame& frame);
+  void draw_particles(const ReimRenderFrame& frame);
+  void draw_sky(const ReimRenderFrame& frame, const ReimVec3& eye);
+  void draw_held_item(const ReimRenderFrame& frame);
   bool create_chunk_program(std::string& error);
   bool create_line_program(std::string& error);
 
@@ -84,6 +94,18 @@ class Renderer {
   GLuint line_program_ = 0;
   GLuint line_vao_ = 0;
   GLuint line_vbo_ = 0;
+  GLuint entity_vao_ = 0;
+  GLuint entity_vbo_ = 0;
+  GLuint white_texture_ = 0;
+  GLuint item_texture_ = 0;
+  struct SpriteRect {
+    float u0 = 0.0f;
+    float v0 = 0.0f;
+    float u1 = 0.0f;
+    float v1 = 0.0f;
+  };
+  std::map<std::string, SpriteRect> item_sprites_;
+  std::map<uint32_t, std::string> item_names_;
 
   GLint chunk_view_proj_ = -1;
   GLint chunk_atlas_ = -1;
@@ -95,7 +117,17 @@ class Renderer {
   GLint line_view_proj_ = -1;
   GLint line_color_ = -1;
 
+  struct EntityPartDef {
+    float size[3] = {0.5f, 0.5f, 0.5f};
+    float pivot[3] = {0.0f, 0.0f, 0.0f};
+    float uv[4] = {0.0f, 0.0f, 1.0f / 128.0f, 1.0f / 8.0f};
+    uint32_t color = 0xFFFFFFu;
+  };
+
   std::map<Key, GpuMesh> meshes_;
+  /* MODEL_DEFS_JSON models by model_id; ids 1..8 are the M3 mobs. */
+  std::map<uint32_t, std::vector<EntityPartDef>> entity_models_;
+  uint32_t default_entity_model_ = 0;
   RenderStats stats_;
 };
 

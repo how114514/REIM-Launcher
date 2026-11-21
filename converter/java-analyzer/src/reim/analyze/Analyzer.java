@@ -126,7 +126,7 @@ public final class Analyzer {
 
     final StringBuilder classesJson = new StringBuilder(classes.size() * 180 + 512);
     classesJson.append("{\n");
-    classesJson.append("  \"format\": 1,\n");
+    classesJson.append("  \"format\": 2,\n");
     classesJson.append("  \"profile\": ").append(json(profile)).append(",\n");
     classesJson.append("  \"jar\": {\"path\": ").append(json(jarPath.toAbsolutePath().toString()))
         .append(", \"sha256\": ").append(json(jarDigest.sha256))
@@ -154,7 +154,30 @@ public final class Analyzer {
       }
       classesJson.append("], \"methods\": ").append(info.methods)
           .append(", \"fields\": ").append(info.fields)
-          .append(", \"bytecode_sha256\": ").append(json(info.bytecodeHash))
+          .append(", \"native_methods\": ").append(info.nativeMethods)
+          .append(", \"surface\": [");
+      for (int j = 0; j < info.surface.size(); ++j) {
+        if (j > 0) classesJson.append(", ");
+        classesJson.append(json(info.surface.get(j)));
+      }
+      classesJson.append("], \"method_list\": [");
+      for (int j = 0; j < info.methodList.size(); ++j) {
+        final MemberInfo member = info.methodList.get(j);
+        if (j > 0) classesJson.append(", ");
+        classesJson.append("{\"name\": ").append(json(member.name()))
+            .append(", \"descriptor\": ").append(json(member.descriptor()))
+            .append(", \"access\": ").append(member.access())
+            .append(", \"native\": ").append(member.isNative()).append("}");
+      }
+      classesJson.append("], \"field_list\": [");
+      for (int j = 0; j < info.fieldList.size(); ++j) {
+        final MemberInfo member = info.fieldList.get(j);
+        if (j > 0) classesJson.append(", ");
+        classesJson.append("{\"name\": ").append(json(member.name()))
+            .append(", \"descriptor\": ").append(json(member.descriptor()))
+            .append(", \"access\": ").append(member.access()).append("}");
+      }
+      classesJson.append("], \"bytecode_sha256\": ").append(json(info.bytecodeHash))
           .append("}");
       classesJson.append(i + 1 == classes.size() ? "\n" : ",\n");
     }
@@ -182,15 +205,74 @@ public final class Analyzer {
     }
     depsJson.append("  ]\n}\n");
 
+    final StringBuilder classDepsJson = new StringBuilder(classes.size() * 96 + 512);
+    classDepsJson.append("{\n");
+    classDepsJson.append("  \"format\": 1,\n");
+    classDepsJson.append("  \"profile\": ").append(json(profile)).append(",\n");
+    final StringBuilder edges = new StringBuilder();
+    int edgeCount = 0;
+    for (ClassInfo info : classes) {
+      for (String dep : info.dependencies) {
+        if (dep == null || dep.equals(info.name)) continue;
+        if (edgeCount++ > 0) edges.append(",\n");
+        edges.append("    {\"from\": ").append(json(info.name))
+            .append(", \"to\": ").append(json(dep)).append("}");
+      }
+    }
+    classDepsJson.append("  \"edge_count\": ").append(edgeCount).append(",\n");
+    classDepsJson.append("  \"edges\": [\n").append(edges).append("\n  ]\n}\n");
+
+    final Map<String, Integer> surfaceCounts = new TreeMap<>();
+    final StringBuilder surfaceClasses = new StringBuilder();
+    int surfaceClassCount = 0;
+    long nativeMethodTotal = 0;
+    for (ClassInfo info : classes) {
+      nativeMethodTotal += info.nativeMethods;
+      if (info.surface.isEmpty()) continue;
+      for (String category : info.surface) {
+        surfaceCounts.merge(category, 1, Integer::sum);
+      }
+      if (surfaceClassCount++ > 0) surfaceClasses.append(",\n");
+      surfaceClasses.append("    {\"class\": ").append(json(info.name))
+          .append(", \"categories\": [");
+      for (int j = 0; j < info.surface.size(); ++j) {
+        if (j > 0) surfaceClasses.append(", ");
+        surfaceClasses.append(json(info.surface.get(j)));
+      }
+      surfaceClasses.append("]}");
+    }
+    final StringBuilder surfaceJson = new StringBuilder(surfaceClassCount * 96 + 512);
+    surfaceJson.append("{\n");
+    surfaceJson.append("  \"format\": 1,\n");
+    surfaceJson.append("  \"profile\": ").append(json(profile)).append(",\n");
+    surfaceJson.append("  \"class_count\": ").append(surfaceClassCount).append(",\n");
+    surfaceJson.append("  \"native_method_count\": ").append(nativeMethodTotal).append(",\n");
+    surfaceJson.append("  \"categories\": {");
+    int categoryIndex = 0;
+    for (Map.Entry<String, Integer> entry : surfaceCounts.entrySet()) {
+      if (categoryIndex++ > 0) surfaceJson.append(", ");
+      surfaceJson.append(json(entry.getKey())).append(": ").append(entry.getValue());
+    }
+    surfaceJson.append("},\n");
+    surfaceJson.append("  \"classes\": [\n").append(surfaceClasses)
+        .append("\n  ]\n}\n");
+
     Files.writeString(outDir.resolve("analysis").resolve("classes.json"),
         classesJson.toString(), StandardCharsets.UTF_8);
     Files.writeString(outDir.resolve("analysis").resolve("deps.json"),
         depsJson.toString(), StandardCharsets.UTF_8);
+    Files.writeString(outDir.resolve("analysis").resolve("class_deps.json"),
+        classDepsJson.toString(), StandardCharsets.UTF_8);
+    Files.writeString(outDir.resolve("analysis").resolve("surface.json"),
+        surfaceJson.toString(), StandardCharsets.UTF_8);
 
     System.out.println("reim-analyze: classes=" + classes.size()
         + " methods=" + methodTotal
         + " fields=" + fieldTotal
         + " deps=" + dependencyRefs.size()
+        + " edges=" + edgeCount
+        + " surface_classes=" + surfaceClassCount
+        + " native_methods=" + nativeMethodTotal
         + " parse_errors=" + parseErrors.size());
     System.out.println("reim-analyze: wrote " + outDir.resolve("analysis"));
   }
@@ -256,7 +338,14 @@ public final class Analyzer {
     int fields;
     String bytecodeHash;
     final List<String> dependencies = new ArrayList<>();
+    final List<MemberInfo> methodList = new ArrayList<>();
+    final List<MemberInfo> fieldList = new ArrayList<>();
+    final List<String[]> memberRefs = new ArrayList<>();
+    final List<String> surface = new ArrayList<>();
+    int nativeMethods;
   }
+
+  private record MemberInfo(String name, String descriptor, int access, boolean isNative) {}
 
   /** Minimal, allocation-light class-file reader for names, counts and code. */
   private static final class ClassParser {
@@ -280,7 +369,9 @@ public final class Analyzer {
       final String[] utf8 = new String[constantCount];
       final String[] className = new String[constantCount];
       final int[] classNameIndex = new int[constantCount];
-      final List<Integer> refClassIndexes = new ArrayList<>();
+      final int[] natNameIndex = new int[constantCount];
+      final int[] natDescriptorIndex = new int[constantCount];
+      final List<int[]> refs = new ArrayList<>();
 
       for (int i = 1; i < constantCount; ++i) {
         final int tag = u1();
@@ -296,12 +387,12 @@ public final class Analyzer {
           case 9, 10, 11 -> {
             final int classIndex = u2();
             final int natIndex = u2();
-            refClassIndexes.add(classIndex);
-            if (natIndex > 0 && natIndex < constantCount) {
-              // name/type is parsed in another slot; no action needed here.
-            }
+            refs.add(new int[] {tag, classIndex, natIndex});
           }
-          case 12 -> position += 4;
+          case 12 -> {
+            natNameIndex[i] = u2();
+            natDescriptorIndex[i] = u2();
+          }
           case 15 -> position += 3;
           case 16 -> position += 2;
           case 17, 18 -> position += 4;
@@ -317,6 +408,21 @@ public final class Analyzer {
           className[i] = utf8At(utf8, classNameIndex[i]);
         }
       }
+      final List<String[]> memberRefs = new ArrayList<>();
+      for (int[] ref : refs) {
+        final int classIndex = ref[1];
+        final int natIndex = ref[2];
+        if (classIndex <= 0 || classIndex >= constantCount) continue;
+        final String owner = className[classIndex];
+        if (owner == null) continue;
+        String memberName = "";
+        String descriptor = "";
+        if (natIndex > 0 && natIndex < constantCount) {
+          memberName = utf8At(utf8, natNameIndex[natIndex]);
+          descriptor = utf8At(utf8, natDescriptorIndex[natIndex]);
+        }
+        memberRefs.add(new String[] {owner, memberName, descriptor});
+      }
 
       u2(); // access flags
       final int thisClass = u2();
@@ -330,21 +436,28 @@ public final class Analyzer {
         }
       }
       final int fieldCount = u2();
+      final List<MemberInfo> fieldList = new ArrayList<>(fieldCount);
       for (int i = 0; i < fieldCount; ++i) {
-        u2();
-        u2();
-        u2();
+        final int access = u2();
+        final String fieldName = utf8At(utf8, u2());
+        final String fieldDescriptor = utf8At(utf8, u2());
+        fieldList.add(new MemberInfo(fieldName, fieldDescriptor, access, false));
         skipAttributes();
       }
       final int methodCount = u2();
+      final List<MemberInfo> methodList = new ArrayList<>(methodCount);
+      int nativeMethods = 0;
       final MessageDigest methodDigest = sha256();
       final String name = thisClass > 0 && thisClass < constantCount ? className[thisClass] : null;
       for (int i = 0; i < methodCount; ++i) {
-        u2(); // access
+        final int access = u2();
         final int methodName = u2();
         final int methodDescriptor = u2();
         final String methodNameText = utf8At(utf8, methodName);
         final String descriptorText = utf8At(utf8, methodDescriptor);
+        final boolean isNative = (access & 0x0100) != 0;
+        if (isNative) ++nativeMethods;
+        methodList.add(new MemberInfo(methodNameText, descriptorText, access, isNative));
         update(methodDigest, methodNameText);
         methodDigest.update((byte) 0);
         update(methodDigest, descriptorText);
@@ -386,15 +499,42 @@ public final class Analyzer {
       info.interfaces.addAll(interfaces);
       info.methods = methodCount;
       info.fields = fieldCount;
+      info.nativeMethods = nativeMethods;
+      info.methodList.addAll(methodList);
+      info.fieldList.addAll(fieldList);
+      info.memberRefs.addAll(memberRefs);
       info.bytecodeHash = hex(methodDigest.digest());
+
+      final java.util.TreeSet<String> surface = new java.util.TreeSet<>();
+      for (String[] ref : memberRefs) {
+        final String owner = ref[0];
+        final String member = ref[1];
+        if (owner.startsWith("java/lang/reflect/") ||
+            (owner.equals("java/lang/Class") && member.equals("forName")) ||
+            (owner.equals("java/lang/Class") && member.startsWith("getDeclared")) ||
+            (owner.equals("java/lang/Class") && member.equals("getMethod"))) {
+          surface.add("reflection");
+        }
+        if (owner.contains("Unsafe")) surface.add("unsafe");
+        if (owner.equals("java/lang/System") &&
+            (member.equals("load") || member.equals("loadLibrary"))) {
+          surface.add("jni");
+        }
+        if (owner.equals("java/lang/ClassLoader") ||
+            member.equals("defineClass") || member.equals("findClass") ||
+            member.equals("loadClass")) {
+          surface.add("classloader");
+        }
+      }
+      if (nativeMethods > 0) surface.add("jni-native");
+      info.surface.addAll(surface);
+
       final List<String> deps = new ArrayList<>();
       for (String value : className) {
         if (value != null) deps.add(value);
       }
-      for (int index : refClassIndexes) {
-        if (index > 0 && index < constantCount && className[index] != null) {
-          deps.add(className[index]);
-        }
+      for (String[] ref : memberRefs) {
+        deps.add(ref[0]);
       }
       deps.sort(String::compareTo);
       String previous = null;

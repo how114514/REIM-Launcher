@@ -1,0 +1,12 @@
+{
+  "id": "RES-04",
+  "description": "A ZIP-slip resource pack is rejected at create() with a clear error code",
+  "spawn": [16.5, 100.0, 80.5],
+  "render_distance": 2,
+  "timeout_ms": 20000,
+  "resource_packs": ["tests/fixtures/packs/res_malicious.zip"],
+  "expect_create_error": true,
+  "setup": [],
+  "steps": [],
+  "assert": []
+}

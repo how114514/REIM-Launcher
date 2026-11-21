@@ -1,0 +1,23 @@
+{
+  "id": "R2-02",
+  "description": "R2: rain weather produces Runtime weather particles and the environment snapshot reports it",
+  "spawn": [16.5, 100.0, 80.5],
+  "spawn_yaw": 0.0,
+  "spawn_pitch": 0.0,
+  "render_distance": 2,
+  "render_level": 2,
+  "weather": "rain",
+  "time": 6000,
+  "ui_canvas": [1280, 720, 2],
+  "timeout_ms": 30000,
+  "setup": [],
+  "steps": [
+    { "wait_ticks": 12 },
+    { "fetch_frames": 3 }
+  ],
+  "assert": [
+    { "type": "status_equals", "path": "world.weather", "value": 1 },
+    { "type": "particles_at_least", "value": 10 },
+    { "type": "audio_sound_seen", "value": 25 }
+  ]
+}

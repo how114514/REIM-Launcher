@@ -1,0 +1,20 @@
+{
+  "id": "M3A-UI-03",
+  "description": "A4/A5: slot click and wheel change the Runtime hotbar selection",
+  "flags": ["ui_spike"],
+  "ui_canvas": [1280, 720, 2],
+  "timeout_ms": 20000,
+  "steps": [
+    { "wait_ticks": 3 },
+    { "action": { "type": "slot_click", "screen": 2, "a": 6, "b": 0 } },
+    { "wait_ticks": 2 },
+    { "action": { "type": "wheel", "screen": 2, "wheel": 1.0 } },
+    { "wait_ticks": 2 },
+    { "action": { "type": "wheel", "screen": 2, "wheel": -1.0 } },
+    { "wait_ticks": 2 }
+  ],
+  "assert": [
+    { "type": "status_equals", "path": "ui.selected_slot", "value": 6 },
+    { "type": "status_at_least", "path": "actions.wheel", "value": 2 }
+  ]
+}

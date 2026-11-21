@@ -1,0 +1,29 @@
+{
+  "id": "SUR-02",
+  "description": "Drowning: low air in water drains and deals damage",
+  "spawn": [16.5, 100.0, 80.5],
+  "spawn_yaw": 0.0,
+  "spawn_pitch": 90.0,
+  "render_distance": 2,
+  "ui_canvas": [1280, 720, 2],
+  "timeout_ms": 30000,
+  "setup": [
+    { "action": "clear_inventory" },
+    { "action": "platform", "x": 16, "y": 97, "z": 80, "radius": 1 },
+    { "action": "set_block", "x": 16, "y": 98, "z": 80, "block": "minecraft:water" },
+    { "action": "set_block", "x": 16, "y": 99, "z": 80, "block": "minecraft:water" },
+    { "action": "set_block", "x": 16, "y": 100, "z": 80, "block": "minecraft:water" },
+    { "action": "set_block", "x": 16, "y": 101, "z": 80, "block": "minecraft:water" },
+    { "action": "set_block", "x": 16, "y": 102, "z": 80, "block": "minecraft:water" },
+    { "action": "set_air", "value": 10 }
+  ],
+  "steps": [
+    { "wait_ticks": 70 },
+    { "fetch_frames": 2 }
+  ],
+  "assert": [
+    { "type": "player_air_at_most", "value": 0.0 },
+    { "type": "player_health_at_most", "value": 19.0 },
+    { "type": "damage_taken_at_least", "value": 2.0 }
+  ]
+}

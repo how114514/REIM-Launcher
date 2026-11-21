@@ -1,0 +1,175 @@
+{
+  "schema": "reim.port_ledger",
+  "format": 1,
+  "profile": "26.3",
+  "entries": [
+    {
+      "java_symbol": "net.minecraft.world.entity.Entity/Mob/LivingEntity",
+      "area": "entity",
+      "kind": "native",
+      "native_module": "runtime/mc-native/game/entity.cpp",
+      "status": "partial",
+      "evidence": "M3-F4/F5/F6 first 8 mobs, physics, A*, spawn/despawn; no per-tick vanilla parity claim"
+    },
+    {
+      "java_symbol": "net.minecraft.world.entity.player.Player/Inventory",
+      "area": "inventory",
+      "kind": "native",
+      "native_module": "runtime/mc-native/game/inventory.cpp",
+      "status": "complete",
+      "evidence": "9 hotbar + 27 main slots, containers, transactions (M3-D4/E1)"
+    },
+    {
+      "java_symbol": "net.minecraft.world.entity.player.FoodData/CombatTracker",
+      "area": "survival",
+      "kind": "native",
+      "native_module": "runtime/mc-native/game/survival.cpp",
+      "status": "complete",
+      "evidence": "F1/F2/F3 health, hunger, damage sources, death/respawn"
+    },
+    {
+      "java_symbol": "net.minecraft.world.inventory.RecipeBookType/RecipeManager",
+      "area": "recipes",
+      "kind": "native",
+      "native_module": "runtime/mc-native/game/recipes.cpp",
+      "status": "partial",
+      "evidence": "native M3 subset (crafting/smelting); data recipes now generated but not wired"
+    },
+    {
+      "java_symbol": "net.minecraft.world.level.storage.loot.LootTable",
+      "area": "loot",
+      "kind": "native",
+      "native_module": "runtime/mc-native/game/gameplay.cpp",
+      "status": "partial",
+      "evidence": "native block loot/drop subset; data loot tables generated for diff/patch only"
+    },
+    {
+      "java_symbol": "net.minecraft.world.level.block.state.BlockBehaviour",
+      "area": "block",
+      "kind": "native",
+      "native_module": "runtime/mc-native/data/block_table.cpp",
+      "status": "partial",
+      "evidence": "C1/C2 subset: collision, render class, tool/material tables"
+    },
+    {
+      "java_symbol": "net.minecraft.world.level.block.Block/BlockPos edits",
+      "area": "block_edit",
+      "kind": "native",
+      "native_module": "runtime/mc-native/world/block_edit.cpp",
+      "status": "complete",
+      "evidence": "place/break/state/variants used by INT scenarios"
+    },
+    {
+      "java_symbol": "net.minecraft.world.level.LightLayer/LevelLightEngine",
+      "area": "light",
+      "kind": "native",
+      "native_module": "",
+      "status": "not_started",
+      "evidence": "M3-C4 light engine not implemented; natural spawn uses approximation"
+    },
+    {
+      "java_symbol": "net.minecraft.world.level.levelgen.NoiseBasedChunkGenerator",
+      "area": "worldgen",
+      "kind": "native",
+      "native_module": "runtime/mc-native/world/worldgen.cpp",
+      "status": "partial",
+      "evidence": "native deterministic profile; K5 data generated but generation not data-driven"
+    },
+    {
+      "java_symbol": "net.minecraft.world.level.biome.Biome",
+      "area": "biome",
+      "kind": "generated",
+      "native_module": "generated/26.3/biomes.json",
+      "status": "partial",
+      "evidence": "registry + tint data generated; 3x3 biome blending not implemented"
+    },
+    {
+      "java_symbol": "net.minecraft.world.level.Level/ServerLevel dimension switch",
+      "area": "dimension",
+      "kind": "native",
+      "native_module": "runtime/mc-native/world/level.cpp",
+      "status": "partial",
+      "evidence": "overworld + minimal nether portal loop (G6); end generation not done"
+    },
+    {
+      "java_symbol": "net.minecraft.world.level.chunk.storage.RegionFileStorage",
+      "area": "save_region",
+      "kind": "native",
+      "native_module": "runtime/mc-native/anvil/region_writer.cpp",
+      "status": "partial",
+      "evidence": "A7 spike read-modify-write; B1 complete WorldWriter not started"
+    },
+    {
+      "java_symbol": "net.minecraft.world.level.storage.LevelData",
+      "area": "save_level",
+      "kind": "native",
+      "native_module": "runtime/mc-native/src/runtime_instance.cpp",
+      "status": "partial",
+      "evidence": "A7 level.dat semantic round-trip; B2 not started"
+    },
+    {
+      "java_symbol": "net.minecraft.client.gui.GuiGraphics/Screen",
+      "area": "ui",
+      "kind": "native",
+      "native_module": "runtime/mc-native/ui/game_ui.cpp",
+      "status": "complete",
+      "evidence": "Runtime display list + hit testing; Preview verified, UE canvas not run"
+    },
+    {
+      "java_symbol": "net.minecraft.client.resources.sounds.SoundManager",
+      "area": "audio",
+      "kind": "native",
+      "native_module": "runtime/mc-native/src/runtime_instance.cpp",
+      "status": "partial",
+      "evidence": "Runtime events + generated OGG index; UE audio consumer not run"
+    },
+    {
+      "java_symbol": "net.minecraft.client.renderer.blockentity.BlockEntityRenderer",
+      "area": "block_entity_render",
+      "kind": "native",
+      "native_module": "",
+      "status": "not_started",
+      "evidence": "depends on C6 block entities (chest/furnace/sign); J4 blocked"
+    },
+    {
+      "java_symbol": "net.minecraft.client.renderer.entity.EntityRenderDispatcher",
+      "area": "entity_render",
+      "kind": "native",
+      "native_module": "runtime/preview/gl_renderer.cpp",
+      "status": "partial",
+      "evidence": "Preview parts/interpolation; UE R1 not run"
+    },
+    {
+      "java_symbol": "net.minecraft.client.particle.ParticleEngine",
+      "area": "particles",
+      "kind": "native",
+      "native_module": "runtime/preview/gl_renderer.cpp",
+      "status": "not_started",
+      "evidence": "J5 particles/weather not yet implemented"
+    },
+    {
+      "java_symbol": "net.minecraft.data.Main (reports/datapack/assets)",
+      "area": "converter_data",
+      "kind": "generated",
+      "native_module": "generated/26.3",
+      "status": "complete",
+      "evidence": "M3-K1..K9 schema v3; worldgen data not yet consumed for generation"
+    },
+    {
+      "java_symbol": "net.minecraft.client.Minecraft class graph",
+      "area": "analyzer",
+      "kind": "analysis",
+      "native_module": "work/26.3/analysis",
+      "status": "complete",
+      "evidence": "L1 classes/methods/fields, bytecode hash, deps graph, reflection/Unsafe/JNI scan"
+    },
+    {
+      "java_symbol": "com.mojang.serialization.DataFixerUpper",
+      "area": "translation",
+      "kind": "analysis",
+      "native_module": "",
+      "status": "not_run",
+      "evidence": "M3-M gate in stage 5; default no-go until reviewed"
+    }
+  ]
+}

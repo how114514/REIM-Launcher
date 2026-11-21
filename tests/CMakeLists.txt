@@ -4,6 +4,11 @@ add_executable(m1-tests
   test_s3.cpp
   test_s4.cpp
   test_m2_b.cpp
+  test_m3_a.cpp
+  test_m3_a7.cpp
+  test_m3_de.cpp
+  test_m3_f.cpp
+  test_m3_g.cpp
   "${CMAKE_SOURCE_DIR}/runtime/preview/render_math.cpp"
 )
 target_include_directories(m1-tests PRIVATE

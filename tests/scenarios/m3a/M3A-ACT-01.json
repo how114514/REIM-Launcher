@@ -1,0 +1,21 @@
+{
+  "id": "M3A-ACT-01",
+  "description": "A4: illegal screen, unpaired STOP and repeated START are rejected/coalesced",
+  "flags": [],
+  "timeout_ms": 20000,
+  "steps": [
+    { "wait_ticks": 2 },
+    { "action": { "type": "slot_click", "screen": 99, "a": 2, "b": 0 } },
+    { "action": { "type": "break_stop" } },
+    { "wait_ticks": 3 },
+    { "action": { "type": "break_start" } },
+    { "action": { "type": "break_start" } },
+    { "action": { "type": "break_stop" } },
+    { "wait_ticks": 3 }
+  ],
+  "assert": [
+    { "type": "status_at_least", "path": "actions.rejected", "value": 2 },
+    { "type": "status_at_least", "path": "actions.coalesced", "value": 1 },
+    { "type": "status_at_least", "path": "actions.applied", "value": 2 }
+  ]
+}

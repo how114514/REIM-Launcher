@@ -175,8 +175,13 @@ bool Region::read_chunk(int local_x, int local_z, std::vector<uint8_t>& out,
                                                                : payload_size));
       return true;
     case 4:
-      error = label + " uses LZ4 compression, which M1 does not support";
-      return false;
+      if (!compression::lz4_decompress_region(
+              payload, (raw_compression & 0x80) ? external_data.size() : payload_size,
+              out, error)) {
+        error = label + " LZ4: " + error;
+        return false;
+      }
+      return true;
     case 127:
       error = label + " uses custom compression, which M1 does not support";
       return false;

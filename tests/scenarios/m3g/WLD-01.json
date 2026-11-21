@@ -1,0 +1,22 @@
+{
+  "id": "WLD-01",
+  "description": "New world: seed 12345 generates a spawnable overworld in memory",
+  "create_world": true,
+  "seed": 12345,
+  "render_distance": 2,
+  "ui_canvas": [1280, 720, 2],
+  "timeout_ms": 40000,
+  "probes": [[0, 65, 0], [0, 64, 0]],
+  "steps": [
+    { "wait_ticks": 30 },
+    { "fetch_frames": 2 }
+  ],
+  "assert": [
+    { "type": "status_at_least", "path": "world.generated_chunks", "value": 25 },
+    { "type": "status_equals", "path": "world.seed", "value": 12345 },
+    { "type": "status_equals", "path": "world.worldgen_source", "value": "native" },
+    { "type": "status_at_least", "path": "world.spawn_surface", "value": 60 },
+    { "type": "block_at", "x": 0, "y": 65, "z": 0, "state": "minecraft:sand" },
+    { "type": "status_at_least", "path": "measured_tps", "value": 15.0 }
+  ]
+}

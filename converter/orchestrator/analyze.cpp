@@ -179,13 +179,27 @@ int run_analyze(const Args& args, const std::filesystem::path& exe_dir) {
   const auto analysis_dir = out_dir / "analysis";
   uint64_t classes_size = 0;
   uint64_t deps_size = 0;
+  uint64_t edges_size = 0;
+  uint64_t surface_size = 0;
   if (!has_file(analysis_dir, "classes.json", classes_size) ||
-      !has_file(analysis_dir, "deps.json", deps_size)) {
-    log_error("analyze: analyzer did not produce analysis/classes.json and deps.json");
+      !has_file(analysis_dir, "deps.json", deps_size) ||
+      !has_file(analysis_dir, "class_deps.json", edges_size) ||
+      !has_file(analysis_dir, "surface.json", surface_size)) {
+    log_error("analyze: analyzer did not produce classes/deps/class_deps/surface");
     return 8;
   }
-  log_info(std::format("analyze: analysis/classes.json {} bytes, analysis/deps.json {} bytes",
-                       classes_size, deps_size));
+  nlohmann::json surface;
+  std::string surface_error;
+  std::string surface_summary = "unreadable";
+  if (read_json_file(analysis_dir / "surface.json", surface, surface_error)) {
+    surface_summary = std::to_string(surface.value("class_count", 0)) + " classes, " +
+                      std::to_string(surface.value("native_method_count", 0)) +
+                      " native methods";
+  }
+  log_info(std::format("analyze: classes {} bytes, deps {} bytes, edges {} bytes, "
+                       "surface {} bytes ({}); reflection/Unsafe/JNI scanned",
+                       classes_size, deps_size, edges_size, surface_size,
+                       surface_summary));
   return 0;
 }
 

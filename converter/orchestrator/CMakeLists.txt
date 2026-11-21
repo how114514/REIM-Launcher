@@ -2,8 +2,13 @@ add_executable(reim-convert
   main.cpp
   common.cpp
   prepare.cpp
+  data.cpp
   analyze.cpp
   extract.cpp
+  ingest_v3.cpp
+  diff.cpp
+  ledger.cpp
+  patch.cpp
   model_resolver.cpp
   inspect_world.cpp
   package.cpp

@@ -134,6 +134,21 @@ Minecraft Reimagined Launcher/
 | `REIMRuntime.exe` + pak | UBT + UAT `BuildCookRun` | UE 5.8.4；Shipping |
 | `contract/reim_abi.h` | 纯 C 头文件 | **Runtime Host ↔ Native DLL** 的版本化 ABI；CI 校验 |
 
+### 4.0 直接游玩（UE Host）
+
+M3 的玩家面向入口是 UE Host；开发机上用仓库自带的启动脚本即可（自动启动 Zen、写入 play instance、拉起 Shipping RC）：
+
+```bat
+cd /d D:\EngineeringDocuments\REIM-Launcher
+play-m3.bat
+:: 或
+powershell -ExecutionPolicy Bypass -File tools\play-m3.ps1
+:: Development 版
+powershell -ExecutionPolicy Bypass -File tools\play-m3.ps1 -Config Development
+```
+
+当前只接入 R0 世界渲染：可以进入存档/移动/看世界；HUD、背包、实体、音频、第一人称的 UE Host 侧尚未实现。想跑自动化/验收用 `tools\m3-acceptance.ps1`，不要用游玩入口代替。
+
 ### 4.1 UE 工程
 
 - `.uproject` + `Source/REIMGame`、`REIMBridge`、`REIMRenderer`、`REIMUI`、`REIMAudio`、`REIMInput`、`REIMAssets`。
@@ -144,11 +159,16 @@ Minecraft Reimagined Launcher/
 
 ### 4.2 UE 打包（Shipping）
 
-日常使用脚本（S3 实测）：
+日常使用脚本（S3 实测；M3 阶段 5 增加 `m3-package.ps1`，输出 `build\m3\ue-shipping-package`）：
 
 ```bat
-powershell -ExecutionPolicy Bypass -File tools\m2-build.ps1 -Package -PackageConfig Shipping
+:: UE 运行/打包前置：启动 Zen storage server（打包结束可能停止共享 Zen）
+"%UE_ROOT%\Engine\Binaries\Win64\ZenLaunch.exe" -Sponsor=None
+powershell -ExecutionPolicy Bypass -File tools\m3-package.ps1 -Config Shipping
+powershell -ExecutionPolicy Bypass -File tools\m3-acceptance.ps1 -World <save-copy>
 ```
+
+`m3-package.ps1` 只做 BuildCookRun/Stage/Pak；`m3-acceptance.ps1` 运行构建、测试、场景、审计、UE R0 与三 Host 一致性，并把未执行项写成 `not_run`。`m2-build.ps1` 仍可用于 M2 历史路径。
 
 脚本内部调用（路径按实际安装调整；`REIMRuntime` 是 UE Game target）：
 

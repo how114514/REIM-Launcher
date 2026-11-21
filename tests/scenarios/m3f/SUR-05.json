@@ -1,0 +1,24 @@
+{
+  "id": "SUR-05",
+  "description": "Starvation: zero food eventually hurts the player",
+  "spawn": [16.5, 100.0, 80.5],
+  "spawn_yaw": 0.0,
+  "spawn_pitch": 90.0,
+  "render_distance": 2,
+  "ui_canvas": [1280, 720, 2],
+  "timeout_ms": 30000,
+  "setup": [
+    { "action": "clear_inventory" },
+    { "action": "platform", "x": 16, "y": 99, "z": 80, "radius": 1 },
+    { "action": "set_food", "value": 0.0 }
+  ],
+  "steps": [
+    { "wait_ticks": 100 },
+    { "fetch_frames": 2 }
+  ],
+  "assert": [
+    { "type": "player_food_at_most", "value": 0.0 },
+    { "type": "player_health_at_most", "value": 19.0 },
+    { "type": "damage_taken_at_least", "value": 1.0 }
+  ]
+}

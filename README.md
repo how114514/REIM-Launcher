@@ -89,7 +89,7 @@ R0 **不是**原版 Java 渲染逻辑/OpenGL 绘制命令回放。
 | [docs/M1_PLAN.md](docs/M1_PLAN.md) | M1 执行计划：工作包、C ABI/快照、Converter 产物、验收与新对话交接规则 |
 | [docs/M2_PLAN.md](docs/M2_PLAN.md) | M2 执行计划：UE Host/Bridge、Rendering Contract v2、R0 渲染、Converter UE Adapter 集成/NativeBuild、Shipping 干净机验收与交接规则 |
 | [docs/M2_ACCEPTANCE.md](docs/M2_ACCEPTANCE.md) | M2 实测记录（S1 A/B/C、S2 D/E/G1、S3 Shipping/回归/验收；干净机与用户确认未执行，单独标注） |
-| [docs/M3_PLAN.md](docs/M3_PLAN.md) | M3 执行计划：完整单机玩法 + R1/R2 渲染、Contract v3、可写存档/世界生成、Converter 数据规模化/差分/Patch、6 波 9 会话（S5 分 S5a/S5b）与 G3 门禁 |
+| [docs/M3_PLAN.md](docs/M3_PLAN.md) | M3 执行计划：完整单机玩法 + R1/R2 渲染、Contract v3、可写存档/世界生成、Converter 数据规模化/差分/Patch、5 个执行阶段（原 10 个会话两两合并）与 G3 门禁 |
 | [docs/M3_ACCEPTANCE.md](docs/M3_ACCEPTANCE.md) | M3 验收骨架：环境实测、26.3 实档审计、M2 遗留收口、G3 门禁与待用户决定项（当前全部 not_run） |
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | 开发环境、仓库布局、构建边界、编码/ABI 规则、测试与发布 |
 | [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) | MC 版本/协议/存档/资源包/Mod/UE 运行环境兼容矩阵 |

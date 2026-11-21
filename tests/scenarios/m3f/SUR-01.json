@@ -1,0 +1,23 @@
+{
+  "id": "SUR-01",
+  "description": "Fall damage: a 14-block drop hurts the player on landing",
+  "spawn": [16.5, 114.0, 80.5],
+  "spawn_yaw": 0.0,
+  "spawn_pitch": 90.0,
+  "render_distance": 2,
+  "ui_canvas": [1280, 720, 2],
+  "timeout_ms": 30000,
+  "setup": [
+    { "action": "clear_inventory" },
+    { "action": "platform", "x": 16, "y": 99, "z": 80, "radius": 1 }
+  ],
+  "steps": [
+    { "wait_ticks": 60 },
+    { "fetch_frames": 2 }
+  ],
+  "assert": [
+    { "type": "player_health_at_most", "value": 16.0 },
+    { "type": "damage_taken_at_least", "value": 6.0 },
+    { "type": "status_equals", "path": "gameplay.survival.damage_cause", "value": "fall" }
+  ]
+}

@@ -5,6 +5,7 @@
 #include "util/utf.h"
 
 #include <cstdio>
+#include <cstdlib>
 #include <format>
 
 #ifdef _WIN32
@@ -89,5 +90,86 @@ std::string strip_namespace(std::string_view name) {
 void log_info(std::string_view message) { reim::log::info("convert", message); }
 void log_warn(std::string_view message) { reim::log::warn("convert", message); }
 void log_error(std::string_view message) { reim::log::error("convert", message); }
+
+std::string quote_process_arg(const std::string& value) {
+  std::string out;
+  out.reserve(value.size() + 2);
+  out.push_back('"');
+  size_t backslashes = 0;
+  for (char c : value) {
+    if (c == '\\') {
+      ++backslashes;
+    } else if (c == '"') {
+      out.append(backslashes * 2 + 1, '\\');
+      out.push_back('"');
+      backslashes = 0;
+    } else {
+      out.append(backslashes, '\\');
+      backslashes = 0;
+      out.push_back(c);
+    }
+  }
+  out.append(backslashes * 2, '\\');
+  out.push_back('"');
+  return out;
+}
+
+bool run_process_utf8(const std::string& application, const std::string& command_line,
+                      int& exit_code, std::string& error) {
+#ifdef _WIN32
+  STARTUPINFOW startup{};
+  startup.cb = sizeof(startup);
+  PROCESS_INFORMATION process{};
+  std::wstring mutable_command = utf::utf8_to_wide(command_line);
+  const std::wstring app = utf::utf8_to_wide(application);
+  const wchar_t* app_ptr = app.empty() ? nullptr : app.c_str();
+  if (!::CreateProcessW(app_ptr, mutable_command.data(), nullptr, nullptr, TRUE,
+                        CREATE_NO_WINDOW, nullptr, nullptr, &startup, &process)) {
+    error = "CreateProcessW failed (" + std::to_string(::GetLastError()) + ")";
+    return false;
+  }
+  ::WaitForSingleObject(process.hProcess, INFINITE);
+  DWORD code = 1;
+  ::GetExitCodeProcess(process.hProcess, &code);
+  ::CloseHandle(process.hThread);
+  ::CloseHandle(process.hProcess);
+  exit_code = static_cast<int>(code);
+  return true;
+#else
+  (void)application;
+  const int raw = std::system(command_line.c_str());
+  exit_code = raw < 0 ? 127 : raw;
+  if (exit_code == 127) error = "failed to start process";
+  return exit_code != 127;
+#endif
+}
+
+bool safe_archive_path(const std::string& entry, std::string& error) {
+  if (entry.empty()) {
+    error = "empty archive path";
+    return false;
+  }
+  if (entry.front() == '/' || entry.front() == '\\') {
+    error = "absolute archive path: " + entry;
+    return false;
+  }
+  if (entry.size() >= 2 && entry[1] == ':') {
+    error = "drive-qualified archive path: " + entry;
+    return false;
+  }
+  size_t start = 0;
+  while (start <= entry.size()) {
+    const size_t slash = entry.find_first_of("/\\", start);
+    const std::string part = entry.substr(
+        start, slash == std::string::npos ? std::string::npos : slash - start);
+    if (part == "..") {
+      error = "path traversal in archive entry: " + entry;
+      return false;
+    }
+    if (slash == std::string::npos) break;
+    start = slash + 1;
+  }
+  return true;
+}
 
 } // namespace reim::conv

@@ -376,7 +376,7 @@ namespace
 		Adapter->TryGetStringField(TEXT("asset_root_sha256"), AssetRoot);
 
 		const FString EngineVersion = EngineVersionString();
-		if (AdapterSchema != TEXT("reim.ue_adapter") || AdapterFormat != 2 ||
+		if (AdapterSchema != TEXT("reim.ue_adapter") || AdapterFormat != 3 ||
 		    AdapterAbi != static_cast<int32>(REIM_ADAPTER_ABI_VERSION) ||
 		    RenderLevel != static_cast<int32>(REIM_ADAPTER_RENDER_LEVEL))
 		{
@@ -689,7 +689,7 @@ void UReimBridgeSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 
 	const void* AssetData = nullptr;
 	uint64 AssetSize = 0;
-	if (State->Api->get_asset(State->Instance, REIM_ASSET_ATLAS_PNG, &AssetData,
+	if (State->Api->get_asset(State->Instance, REIM_ASSET_ATLAS_PNG, 0, &AssetData,
 	                          &AssetSize, &State->AtlasRevision) == REIM_OK &&
 	    AssetData != nullptr && AssetSize != 0)
 	{
@@ -700,7 +700,7 @@ void UReimBridgeSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	const void* MetaData = nullptr;
 	uint64 MetaSize = 0;
 	uint64 MetaRevision = 0;
-	if (State->Api->get_asset(State->Instance, REIM_ASSET_ATLAS_META, &MetaData,
+	if (State->Api->get_asset(State->Instance, REIM_ASSET_ATLAS_META, 0, &MetaData,
 	                          &MetaSize, &MetaRevision) == REIM_OK &&
 	    MetaData != nullptr)
 	{

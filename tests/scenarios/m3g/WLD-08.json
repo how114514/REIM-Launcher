@@ -1,0 +1,18 @@
+{
+  "id": "WLD-08",
+  "description": "Generation streaming: render distance 4 generates 81 chunks without stalling ticks",
+  "create_world": true,
+  "seed": 777,
+  "render_distance": 4,
+  "ui_canvas": [1280, 720, 2],
+  "timeout_ms": 60000,
+  "steps": [
+    { "wait_ticks": 60 },
+    { "fetch_frames": 2 }
+  ],
+  "assert": [
+    { "type": "status_at_least", "path": "world.generated_chunks", "value": 81 },
+    { "type": "status_at_least", "path": "measured_tps", "value": 15.0 },
+    { "type": "status_at_least", "path": "world.ore_blocks", "value": 100 }
+  ]
+}

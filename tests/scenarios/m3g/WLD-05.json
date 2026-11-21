@@ -1,0 +1,17 @@
+{
+  "id": "WLD-05",
+  "description": "Features: trees and plants are placed deterministically",
+  "create_world": true,
+  "seed": 12345,
+  "render_distance": 2,
+  "ui_canvas": [1280, 720, 2],
+  "timeout_ms": 40000,
+  "steps": [
+    { "wait_ticks": 30 },
+    { "fetch_frames": 2 }
+  ],
+  "assert": [
+    { "type": "status_at_least", "path": "world.trees", "value": 1 },
+    { "type": "status_at_least", "path": "world.plants", "value": 1 }
+  ]
+}

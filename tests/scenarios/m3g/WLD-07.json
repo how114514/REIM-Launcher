@@ -1,0 +1,35 @@
+{
+  "id": "WLD-07",
+  "description": "Nether portal: use a portal, generate/enter the nether, then return",
+  "create_world": true,
+  "seed": 12345,
+  "spawn": [8.5, 100.0, 8.5],
+  "spawn_yaw": 0.0,
+  "spawn_pitch": 0.0,
+  "render_distance": 2,
+  "ui_canvas": [1280, 720, 2],
+  "timeout_ms": 60000,
+  "setup": [
+    { "action": "clear_inventory" },
+    { "action": "platform", "x": 8, "y": 99, "z": 8, "radius": 2 },
+    { "action": "set_block", "x": 10, "y": 100, "z": 8, "block": "minecraft:nether_portal" },
+    { "action": "set_block", "x": 10, "y": 101, "z": 8, "block": "minecraft:nether_portal" }
+  ],
+  "probes": [[10, 100, 8]],
+  "steps": [
+    { "wait_ticks": 5 },
+    { "action": { "type": "use_block", "x": 10, "y": 100, "z": 8 } },
+    { "wait_ticks": 10 },
+    { "fetch_frames": 1 },
+    { "assert": { "type": "status_equals", "path": "world.dimension", "value": 1 } },
+    { "assert": { "type": "status_at_least", "path": "world.generated_chunks", "value": 25 } },
+    { "action": { "type": "use_block" } },
+    { "wait_ticks": 10 },
+    { "fetch_frames": 2 }
+  ],
+  "assert": [
+    { "type": "status_equals", "path": "world.dimension", "value": 0 },
+    { "type": "block_at", "x": 10, "y": 100, "z": 8, "state": "minecraft:nether_portal" },
+    { "type": "status_at_least", "path": "world.generated_chunks", "value": 25 }
+  ]
+}

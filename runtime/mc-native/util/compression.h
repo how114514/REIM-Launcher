@@ -27,4 +27,18 @@ bool gzip_decompress(const uint8_t* source, size_t size, std::vector<uint8_t>& o
 bool decompress_auto(const uint8_t* source, size_t size, std::vector<uint8_t>& out,
                      std::string& error);
 
+/* M3-B write path. zlib is the preferred Anvil compression; gzip is used for
+ * level.dat and the split data files. Output is canonical for a fixed input
+ * and level (no timestamps). */
+bool zlib_compress(const uint8_t* source, size_t size, std::vector<uint8_t>& out,
+                   std::string& error, int level = 6);
+bool gzip_compress(const uint8_t* source, size_t size, std::vector<uint8_t>& out,
+                   std::string& error, int level = 6);
+
+/* 26.3 region LZ4 chunks: a sequence of 4-byte little-endian compressed block
+ * sizes followed by LZ4 blocks (max 4 MiB uncompressed each). LZ4 is read-only;
+ * the writer keeps zlib. */
+bool lz4_decompress_region(const uint8_t* source, size_t size,
+                           std::vector<uint8_t>& out, std::string& error);
+
 } // namespace reim::compression

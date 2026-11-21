@@ -15,6 +15,10 @@ bool read_all(const std::filesystem::path& path, Bytes& out, std::string& error)
 bool read_text(const std::filesystem::path& path, std::string& out, std::string& error);
 bool write_all(const std::filesystem::path& path, const void* data, size_t size,
                std::string& error);
+/* Temp file in the same directory + FlushFileBuffers + atomic replace
+ * (MoveFileExW on Windows). The original file is never truncated in place. */
+bool write_atomic(const std::filesystem::path& path, const void* data, size_t size,
+                  std::string& error);
 bool write_text(const std::filesystem::path& path, const std::string& text,
                 std::string& error);
 bool ensure_directory(const std::filesystem::path& path, std::string& error);

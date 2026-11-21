@@ -1,0 +1,19 @@
+{
+  "id": "WLD-04",
+  "description": "Ore bands: generated chunks contain coal, iron and diamond",
+  "create_world": true,
+  "seed": 12345,
+  "render_distance": 2,
+  "ui_canvas": [1280, 720, 2],
+  "timeout_ms": 40000,
+  "steps": [
+    { "wait_ticks": 30 },
+    { "fetch_frames": 2 }
+  ],
+  "assert": [
+    { "type": "status_at_least", "path": "world.ore_blocks", "value": 100 },
+    { "type": "status_at_least", "path": "world.ore_counts.minecraft:coal_ore", "value": 10 },
+    { "type": "status_at_least", "path": "world.ore_counts.minecraft:iron_ore", "value": 10 },
+    { "type": "status_at_least", "path": "world.ore_counts.minecraft:diamond_ore", "value": 1 }
+  ]
+}

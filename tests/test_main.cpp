@@ -29,6 +29,16 @@ std::string write_manifest_case(const std::filesystem::path& dir) {
       {"blocks.json", "{\"blocks\":{}}\n"},
       {"textures.json", "{\"sprites\":{}}\n"},
       {"atlas.png", "not-a-real-png-for-manifest-test\n"},
+      {"items.json", "{\"items\":{}}\n"},
+      {"entities.json", "{\"entities\":{}}\n"},
+      {"models.json", "{\"blocks\":{}}\n"},
+      {"recipes.json", "{\"recipes\":{}}\n"},
+      {"loot_tables.json", "{\"tables\":{}}\n"},
+      {"tags.json", "{\"types\":{}}\n"},
+      {"worldgen.json", "{\"types\":{}}\n"},
+      {"sounds.json", "{\"m3\":[]}\n"},
+      {"lang.json", "{\"language\":\"en_us\"}\n"},
+      {"coverage_report.json", "{\"schema\":\"test\"}\n"},
   };
   nlohmann::json generated = nlohmann::json::array();
   for (const Item& item : items) {
@@ -42,7 +52,7 @@ std::string write_manifest_case(const std::filesystem::path& dir) {
   }
   nlohmann::json manifest;
   manifest["schema"] = "reim.generated.manifest";
-  manifest["format"] = 2;
+  manifest["format"] = 3;
   manifest["profile"] = "26.3";
   manifest["abi_version"] = REIM_ABI_VERSION;
   manifest["tool"] = "m1-tests";
@@ -67,8 +77,8 @@ std::string write_manifest_case(const std::filesystem::path& dir) {
 
 } // namespace
 
-TEST_CASE("ABI v2 layout is stable") {
-  REQUIRE(REIM_ABI_VERSION == 2u);
+TEST_CASE("ABI v3 layout is stable") {
+  REQUIRE(REIM_ABI_VERSION == 3u);
   REQUIRE(sizeof(ReimVertex) == REIM_VERTEX_STRIDE);
   REQUIRE(offsetof(ReimVertex, position) == 0);
   REQUIRE(offsetof(ReimVertex, normal) == 12);
@@ -85,6 +95,24 @@ TEST_CASE("ABI v2 layout is stable") {
   REQUIRE(REIM_MAX_FRAME_BYTES == 64ull * 1024ull * 1024ull);
   REQUIRE(REIM_INSTANCE_CONFIG_MIN_SIZE >=
           offsetof(ReimInstanceConfig, spawn_pitch) + sizeof(float));
+
+  /* v3 append-only prefixes and the new channel layouts. */
+  REQUIRE(REIM_INSTANCE_CONFIG_MIN_SIZE >=
+          offsetof(ReimInstanceConfig, seed) + sizeof(uint64_t));
+  REQUIRE(REIM_RENDER_FRAME_MIN_SIZE >=
+          offsetof(ReimRenderFrame, reserved3) + sizeof(uint32_t) * 8);
+  REQUIRE(offsetof(ReimRenderFrame, interaction) >
+          offsetof(ReimRenderFrame, owned_bytes));
+  REQUIRE(REIM_ACTION_EVENT_MIN_SIZE <= sizeof(ReimActionEvent));
+  REQUIRE(REIM_ACTIONTYPE_WHEEL == 20u);
+  REQUIRE(REIM_MAX_ACTION_QUEUE == 1024u);
+  REQUIRE(REIM_MAX_UI_DRAWS == 8192u);
+  REQUIRE(REIM_MAX_FRAME_ENTITIES == 8192u);
+  REQUIRE(REIM_MAX_FRAME_PART_TRANSFORMS == 1048576u);
+  REQUIRE(REIM_MAX_FRAME_AUDIO_EVENTS == 4096u);
+  REQUIRE(offsetof(ReimUiDraw, text_offset) == 64u);
+  REQUIRE(offsetof(ReimAudioEvent, sequence) == 40u);
+  REQUIRE(sizeof(ReimPartTransform) == 48u);
 }
 
 TEST_CASE("DLL exports reim_get_api with the expected ABI") {
@@ -97,6 +125,10 @@ TEST_CASE("DLL exports reim_get_api with the expected ABI") {
   REQUIRE(api->release_frame != nullptr);
   REQUIRE(api->get_runtime_info != nullptr);
   REQUIRE(api->get_asset != nullptr);
+  REQUIRE(api->submit_action != nullptr);
+  REQUIRE(api->request_save != nullptr);
+  REQUIRE(api->get_save_status != nullptr);
+  REQUIRE(api->set_ui_canvas != nullptr);
   REQUIRE(reim_get_api(REIM_ABI_VERSION + 1) == nullptr);
 }
 
@@ -153,11 +185,11 @@ TEST_CASE("generated manifest accepts matching input and rejects mismatches") {
   std::string error;
   REQUIRE(reim::data::validate_generated(dir, "26.3", REIM_ABI_VERSION, manifest, error));
   REQUIRE(manifest.profile == "26.3");
-  REQUIRE(manifest.format == 2);
-  REQUIRE(manifest.files.size() == 3);
+  REQUIRE(manifest.format == 3);
+  REQUIRE(manifest.files.size() == 13);
   REQUIRE(manifest.atlas_meta_version == 2);
 
-  /* ABI 2 rejects pre-v2 generated data instead of guessing. */
+  /* ABI 3 rejects pre-v3 generated data instead of guessing. */
   nlohmann::json old_manifest = nlohmann::json::parse(write_manifest_case(dir));
   old_manifest["format"] = 1;
   std::string ignored;
@@ -165,6 +197,28 @@ TEST_CASE("generated manifest accepts matching input and rejects mismatches") {
   REQUIRE_FALSE(
       reim::data::validate_generated(dir, "26.3", REIM_ABI_VERSION, manifest, error));
   REQUIRE(error.find("format 1") != std::string::npos);
+
+  /* ABI 3 also rejects the old v2 manifest with a clear schema error. */
+  nlohmann::json v2_manifest = nlohmann::json::parse(write_manifest_case(dir));
+  v2_manifest["format"] = 2;
+  REQUIRE(reim::file::write_text(dir / "manifest.json", v2_manifest.dump(2), ignored));
+  REQUIRE_FALSE(
+      reim::data::validate_generated(dir, "26.3", REIM_ABI_VERSION, manifest, error));
+  REQUIRE(error.find("format 2") != std::string::npos);
+
+  /* v3 requires the data-scale outputs, not just the block atlas. */
+  nlohmann::json missing_file = nlohmann::json::parse(write_manifest_case(dir));
+  auto& generated_list = missing_file["generated"];
+  for (auto it = generated_list.begin(); it != generated_list.end(); ++it) {
+    if (it->value("path", "") == "coverage_report.json") {
+      generated_list.erase(it);
+      break;
+    }
+  }
+  REQUIRE(reim::file::write_text(dir / "manifest.json", missing_file.dump(2), ignored));
+  REQUIRE_FALSE(
+      reim::data::validate_generated(dir, "26.3", REIM_ABI_VERSION, manifest, error));
+  REQUIRE(error.find("coverage_report.json") != std::string::npos);
   REQUIRE(reim::file::write_text(dir / "manifest.json",
                                  nlohmann::json::parse(write_manifest_case(dir)).dump(2),
                                  ignored));

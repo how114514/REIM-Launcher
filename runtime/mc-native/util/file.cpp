@@ -1,7 +1,13 @@
 #include "util/file.h"
 
+#include <algorithm>
+#include <atomic>
 #include <fstream>
 #include <system_error>
+
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 namespace reim::file {
 
@@ -68,6 +74,76 @@ bool write_all(const std::filesystem::path& path, const void* data, size_t size,
     return false;
   }
   return true;
+}
+
+bool write_atomic(const std::filesystem::path& path, const void* data, size_t size,
+                  std::string& error) {
+  std::error_code ec;
+  if (path.has_parent_path()) {
+    std::filesystem::create_directories(path.parent_path(), ec);
+    if (ec) {
+      error = "cannot create directory: " + to_utf8(path.parent_path()) + ": " +
+              ec.message();
+      return false;
+    }
+  }
+  static std::atomic<uint32_t> counter{0};
+  std::filesystem::path temp = path;
+  temp += ".tmp-" + std::to_string(++counter);
+#ifdef _WIN32
+  const std::wstring temp_wide = temp.wstring();
+  const std::wstring target_wide = path.wstring();
+  HANDLE handle = ::CreateFileW(temp_wide.c_str(), GENERIC_WRITE, 0, nullptr,
+                                CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+  if (handle == INVALID_HANDLE_VALUE) {
+    error = "cannot create temp file: " + to_utf8(temp) + " (" +
+            std::to_string(::GetLastError()) + ")";
+    return false;
+  }
+  const auto* bytes = static_cast<const uint8_t*>(data);
+  size_t written = 0;
+  bool ok = true;
+  while (written < size) {
+    const DWORD chunk = static_cast<DWORD>(
+        std::min<size_t>(size - written, 64u * 1024u * 1024u));
+    DWORD count = 0;
+    if (!::WriteFile(handle, bytes + written, chunk, &count, nullptr) ||
+        count == 0) {
+      error = "write failed: " + to_utf8(temp) + " (" +
+              std::to_string(::GetLastError()) + ")";
+      ok = false;
+      break;
+    }
+    written += count;
+  }
+  if (ok && !::FlushFileBuffers(handle)) {
+    error = "flush failed: " + to_utf8(temp) + " (" +
+            std::to_string(::GetLastError()) + ")";
+    ok = false;
+  }
+  ::CloseHandle(handle);
+  if (!ok) {
+    std::filesystem::remove(temp, ec);
+    return false;
+  }
+  if (!::MoveFileExW(temp_wide.c_str(), target_wide.c_str(),
+                     MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+    error = "atomic replace failed: " + to_utf8(path) + " (" +
+            std::to_string(::GetLastError()) + ")";
+    std::filesystem::remove(temp, ec);
+    return false;
+  }
+  return true;
+#else
+  if (!write_all(temp, data, size, error)) return false;
+  std::filesystem::rename(temp, path, ec);
+  if (ec) {
+    error = "atomic replace failed: " + to_utf8(path) + ": " + ec.message();
+    std::filesystem::remove(temp, ec);
+    return false;
+  }
+  return true;
+#endif
 }
 
 bool write_text(const std::filesystem::path& path, const std::string& text,

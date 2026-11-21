@@ -1,10 +1,22 @@
 /*
- * REIM Runtime <-> Host C ABI, version 2 (M2).
+ * REIM Runtime <-> Host C ABI, version 3 (M3).
  *
  * Scope
  *   This header is ONLY the boundary between a Runtime Host (REIMPreview.exe,
  *   reim-headless.exe, the UE runtime) and the version-specific native gameplay
  *   DLL (mc_26.3.dll). It is not a Launcher/Converter protocol.
+ *
+ * v3 additions (M3_PLAN 7.2/7.7)
+ *   Action intents (submit_action), save requests/status, UI canvas size,
+ *   game/UI/audio snapshots, and extended assets. v2 services are not kept:
+ *   Preview/headless/UE rebuild together against this header (M3-D03).
+ *
+ *   submit_action          : any thread; bounded queue, applied next tick.
+ *   request_save           : any thread; queues an asynchronous save.
+ *   get_save_status        : any thread; reads the latest save state.
+ *   set_ui_canvas          : any thread; the Host's pixel canvas size/scale.
+ *   get_asset              : asset_id selects sub-assets (sound/lang/atlas
+ *                            page); 0 is the primary asset of that kind.
  *
  * Threading
  *   create/destroy/start/stop  : control thread, not concurrent with each other.
@@ -54,8 +66,11 @@
 #include <stdint.h>
 
 #include "reim_render.h"
+#include "reim_game.h"
+#include "reim_ui.h"
+#include "reim_audio.h"
 
-#define REIM_ABI_VERSION 2u
+#define REIM_ABI_VERSION 3u
 
 #if defined(_WIN32)
 #  if defined(REIM_BUILD_DLL)
@@ -101,6 +116,13 @@ typedef enum ReimResult {
 #define REIM_CAP_INTERPOLATION 0x00000002u   /* prev_* + tick_alpha */
 #define REIM_CAP_ATLAS_ASSET 0x00000004u     /* get_asset atlas PNG/meta */
 #define REIM_CAP_R0 0x00000008u              /* render_level 0 supported */
+#define REIM_CAP_R1 0x00000010u              /* R1 entities/models */
+#define REIM_CAP_R2 0x00000020u              /* R2 particles/weather/UI */
+#define REIM_CAP_UI 0x00000040u              /* ReimUiFrame display list */
+#define REIM_CAP_AUDIO 0x00000080u           /* ReimAudioEvent list */
+#define REIM_CAP_SAVE 0x00000100u            /* request_save/get_save_status */
+#define REIM_CAP_ENTITIES 0x00000200u        /* entity render instances */
+#define REIM_CAP_ACTIONS 0x00000400u         /* submit_action intents */
 
 typedef enum ReimLogLevel {
   REIM_LOG_TRACE = 0,
@@ -139,7 +161,23 @@ typedef enum ReimKey {
   REIM_KEY_UP = 12,
   REIM_KEY_DOWN = 13,
   REIM_KEY_LEFT = 14,
-  REIM_KEY_RIGHT = 15
+  REIM_KEY_RIGHT = 15,
+  /* v3 additive key codes (no layout change). The Runtime owns the UI/menu
+   * meaning of these keys; Hosts only map their native keys and forward the
+   * input event (M3_PLAN 8.10). */
+  REIM_KEY_E = 16,        /* inventory / close screen */
+  REIM_KEY_Q = 17,        /* drop selected item */
+  REIM_KEY_ENTER = 18,
+  REIM_KEY_1 = 19,        /* 1..9 select hotbar slots 0..8 */
+  REIM_KEY_2 = 20,
+  REIM_KEY_3 = 21,
+  REIM_KEY_4 = 22,
+  REIM_KEY_5 = 23,
+  REIM_KEY_6 = 24,
+  REIM_KEY_7 = 25,
+  REIM_KEY_8 = 26,
+  REIM_KEY_9 = 27,
+  REIM_KEY_TAB = 28
 } ReimKey;
 
 typedef struct ReimHostApi {
@@ -189,17 +227,47 @@ typedef struct ReimInstanceConfig {
    * context; version validation of native_version.json/ue_adapter.json is a UE
    * Host responsibility (M2-E6). Optional for Preview/headless. */
   const wchar_t* native_version_path;
-  /* Requested render level. Only 0 (R0) is supported in M2; any other value
-   * makes create() fail with REIM_ERR_CAPABILITY. */
+  /* Requested render level: 0 (R0), 1 (R1 data) or 2 (R2 data). The Runtime
+   * publishes the matching R1/R2 capabilities and mirrors the value in
+   * get_runtime_info; values above 2 fail with REIM_ERR_CAPABILITY (M3-J8). */
   uint32_t render_level;
   /* Optional spawn orientation for diagnostics/screenshots, in degrees using
    * the Runtime convention. Applied only with REIM_CONFIG_FLAG_SPAWN_OVERRIDE. */
   float spawn_yaw;
   float spawn_pitch;
   uint32_t reserved2[4];
+
+  /* ---- v3 additions ---------------------------------------------------- */
+
+  /* Optional Host log directory. Diagnostics only; the Runtime never reads
+   * Host configuration files. */
+  const wchar_t* log_dir;
+  /* UTF-8 JSON arrays of absolute pack paths, resolved by the Host. The
+   * Runtime loads them; it does not discover files on its own. NULL = none. */
+  const char* resource_packs;
+  const char* data_packs;
+  /* UTF-8 scenario config for automated runs; NULL = interactive. Shipping
+   * rejects scenario mode. */
+  const char* scenario;
+  /* Seconds between autosaves; 0 disables. */
+  uint32_t autosave_seconds;
+  /* Integer UI layout scale; 0 = Runtime default (1 for Preview/headless). */
+  uint32_t ui_scale;
+  uint32_t gamemode;   /* ReimGamemode; M3 validates survival only */
+  uint32_t difficulty; /* ReimDifficulty */
+  uint32_t create_world; /* non-zero = create a new world at world_path */
+  uint32_t reserved3[3];
+  /* Seed for create_world; ignored otherwise. */
+  uint64_t seed;
+  uint32_t reserved4[4];
 } ReimInstanceConfig;
 
 #define REIM_CONFIG_FLAG_SPAWN_OVERRIDE 0x00000001u
+/* Publish the Contract-spike channels (one box entity + one UI sound event).
+ * Diagnostics/acceptance only; off in normal runs. */
+#define REIM_CONFIG_FLAG_CHANNEL_SPIKE 0x00000002u
+/* Publish the UI test screen (display-list spike). */
+#define REIM_CONFIG_FLAG_UI_SPIKE 0x00000004u
 
 typedef struct ReimInputEvent {
   uint32_t struct_size;
@@ -214,10 +282,14 @@ typedef struct ReimInputEvent {
 /* v1 prefix size; kept so callers can sanity-check older layouts. */
 #define REIM_INSTANCE_CONFIG_V1_SIZE \
   ((uint32_t)(offsetof(ReimInstanceConfig, reserved) + sizeof(((ReimInstanceConfig*)0)->reserved)))
-/* v2 required size: every field through the last reserved slot must be known. */
-#define REIM_INSTANCE_CONFIG_MIN_SIZE \
+/* v2 prefix size. */
+#define REIM_INSTANCE_CONFIG_V2_SIZE \
   ((uint32_t)(offsetof(ReimInstanceConfig, reserved2) + \
               sizeof(((ReimInstanceConfig*)0)->reserved2)))
+/* v3 required size: every field through the last reserved slot must be known. */
+#define REIM_INSTANCE_CONFIG_MIN_SIZE \
+  ((uint32_t)(offsetof(ReimInstanceConfig, reserved4) + \
+              sizeof(((ReimInstanceConfig*)0)->reserved4)))
 #define REIM_INPUT_EVENT_MIN_SIZE \
   ((uint32_t)(offsetof(ReimInputEvent, dy) + sizeof(float)))
 
@@ -235,16 +307,34 @@ typedef struct ReimRuntimeInfo {
   uint32_t render_level;       /* 0 = R0 */
   uint32_t dll_abi_version;    /* ABI of the loaded DLL image */
   uint32_t reserved[7];
+
+  /* ---- v3 additions ---------------------------------------------------- */
+  uint32_t schema_version;     /* generated data schema accepted (2 or 3) */
+  uint32_t max_ui_scale;
+  uint32_t reserved2[6];
 } ReimRuntimeInfo;
 
 typedef enum ReimAssetKind {
-  REIM_ASSET_ATLAS_PNG = 1,   /* PNG bytes, as stored in generated/atlas.png */
-  REIM_ASSET_ATLAS_META = 2   /* UTF-8 JSON: width/height/tile/sampling/format/hash */
+  REIM_ASSET_ATLAS_PNG = 1,        /* PNG bytes, generated/atlas.png */
+  REIM_ASSET_ATLAS_META = 2,       /* UTF-8 JSON atlas metadata */
+  /* v3 assets. asset_id selects the instance; 0 is the primary asset. */
+  REIM_ASSET_ITEM_ATLAS_PNG = 3,
+  REIM_ASSET_ITEM_ATLAS_META = 4,
+  REIM_ASSET_UI_ATLAS_PNG = 5,
+  REIM_ASSET_UI_ATLAS_META = 6,
+  REIM_ASSET_FONT_ATLAS = 7,       /* PNG glyph atlas */
+  REIM_ASSET_FONT_META = 8,        /* UTF-8 JSON glyph metrics/character map */
+  REIM_ASSET_SOUND_OGG = 9,        /* asset_id = sound id from SOUND_INDEX_JSON */
+  REIM_ASSET_LANG_JSON = 10,       /* asset_id = language index; 0 = en_us */
+  REIM_ASSET_MODEL_DEFS_JSON = 11, /* box/part model definitions (v3) */
+  REIM_ASSET_SOUND_INDEX_JSON = 12,/* id -> name/category/asset mapping */
+  REIM_ASSET_ITEM_INDEX_JSON = 13, /* item id -> name/texture/icon mapping */
+  REIM_ASSET_UI_INDEX_JSON = 14    /* UI atlas element rectangles */
 } ReimAssetKind;
 
 #define REIM_RUNTIME_INFO_MIN_SIZE \
-  ((uint32_t)(offsetof(ReimRuntimeInfo, reserved) + \
-              sizeof(((ReimRuntimeInfo*)0)->reserved)))
+  ((uint32_t)(offsetof(ReimRuntimeInfo, reserved2) + \
+              sizeof(((ReimRuntimeInfo*)0)->reserved2)))
 
 typedef struct ReimRuntimeApi {
   uint32_t struct_size;
@@ -289,10 +379,35 @@ typedef struct ReimRuntimeApi {
                                         ReimRuntimeInfo* out);
 
   /* Returns read-only asset memory owned by the Runtime, valid until destroy.
-   * out_revision changes when the instance's asset content changes. */
+   * asset_id selects a sub-asset (sound id, language index, atlas page);
+   * pass 0 for the primary asset of a kind. out_revision changes when the
+   * instance's asset content changes. */
   int32_t (REIM_CALL* get_asset)(ReimInstance* instance, uint32_t kind,
-                                 const void** out_data, uint64_t* out_size,
-                                 uint64_t* out_revision);
+                                 uint32_t asset_id, const void** out_data,
+                                 uint64_t* out_size, uint64_t* out_revision);
+
+  /* ---- v3 additions (appended; v2 table prefix unchanged) -------------- */
+
+  /* Intent queue, applied on the next simulation tick (M3-D04). Any thread;
+   * a full queue logs and drops the event without blocking the simulation.
+   * POINTER events coalesce to the newest state. */
+  void (REIM_CALL* submit_action)(ReimInstance* instance,
+                                  const ReimActionEvent* event);
+
+  /* Queue an asynchronous save. Returns REIM_OK when queued, REIM_ERR_BUSY
+   * when a save is already running and the flags do not force one, or
+   * REIM_ERR_NO_WORLD when the instance has no writable world. */
+  int32_t (REIM_CALL* request_save)(ReimInstance* instance, uint32_t flags);
+
+  /* Read the latest save state; out->struct_size is checked. */
+  int32_t (REIM_CALL* get_save_status)(ReimInstance* instance,
+                                       ReimSaveStatus* out);
+
+  /* Host canvas size and scale for Runtime layout/hit testing. Any thread;
+   * the value is published with the next tick. width/height in pixels;
+   * scale <= 0 keeps the Runtime default. */
+  void (REIM_CALL* set_ui_canvas)(ReimInstance* instance, uint32_t width,
+                                  uint32_t height, float scale);
 } ReimRuntimeApi;
 
 /* Returns nullptr when abi_version does not match REIM_ABI_VERSION.
@@ -300,6 +415,20 @@ typedef struct ReimRuntimeApi {
 REIM_EXPORT const ReimRuntimeApi* REIM_CALL reim_get_api(uint32_t abi_version);
 
 #ifdef __cplusplus
+static_assert(offsetof(ReimInstanceConfig, log_dir) >=
+                  REIM_INSTANCE_CONFIG_V2_SIZE &&
+              offsetof(ReimInstanceConfig, log_dir) <
+                  REIM_INSTANCE_CONFIG_V2_SIZE + 8,
+              "ReimInstanceConfig v3 fields must follow the v2 prefix");
+static_assert(offsetof(ReimInstanceConfig, reserved4) + sizeof(uint32_t) * 4 ==
+                  sizeof(ReimInstanceConfig),
+              "ReimInstanceConfig must end at its min-size macro");
+static_assert(offsetof(ReimActionEvent, sequence) == 8,
+              "ReimActionEvent v3 layout changed");
+static_assert(offsetof(ReimSaveStatus, last_error) > 0,
+              "ReimSaveStatus v3 layout changed");
+static_assert(REIM_ACTION_EVENT_MIN_SIZE <= sizeof(ReimActionEvent),
+              "ReimActionEvent min size exceeds layout");
 } /* extern "C" */
 #endif
 

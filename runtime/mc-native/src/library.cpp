@@ -74,11 +74,33 @@ int32_t REIM_CALL get_runtime_info(ReimInstance* instance, ReimRuntimeInfo* out)
 }
 
 int32_t REIM_CALL get_asset(ReimInstance* instance, uint32_t kind,
-                            const void** out_data, uint64_t* out_size,
-                            uint64_t* out_revision) {
+                            uint32_t asset_id, const void** out_data,
+                            uint64_t* out_size, uint64_t* out_revision) {
   if (!instance) return REIM_ERR_INVALID_ARGUMENT;
   return reinterpret_cast<RuntimeInstance*>(instance)->get_asset(
-      kind, out_data, out_size, out_revision);
+      kind, asset_id, out_data, out_size, out_revision);
+}
+
+void REIM_CALL submit_action(ReimInstance* instance, const ReimActionEvent* event) {
+  if (!instance) return;
+  reinterpret_cast<RuntimeInstance*>(instance)->submit_action(event);
+}
+
+int32_t REIM_CALL request_save(ReimInstance* instance, uint32_t flags) {
+  if (!instance) return REIM_ERR_INVALID_ARGUMENT;
+  return reinterpret_cast<RuntimeInstance*>(instance)->request_save(flags);
+}
+
+int32_t REIM_CALL get_save_status(ReimInstance* instance, ReimSaveStatus* out) {
+  if (!instance) return REIM_ERR_INVALID_ARGUMENT;
+  return reinterpret_cast<RuntimeInstance*>(instance)->get_save_status(out);
+}
+
+void REIM_CALL set_ui_canvas(ReimInstance* instance, uint32_t width,
+                             uint32_t height, float scale) {
+  if (!instance) return;
+  reinterpret_cast<RuntimeInstance*>(instance)->set_ui_canvas(width, height,
+                                                              scale);
 }
 
 const ReimRuntimeApi kApi = {
@@ -95,6 +117,10 @@ const ReimRuntimeApi kApi = {
     &release_frame,
     &get_runtime_info,
     &get_asset,
+    &submit_action,
+    &request_save,
+    &get_save_status,
+    &set_ui_canvas,
 };
 
 } // namespace
