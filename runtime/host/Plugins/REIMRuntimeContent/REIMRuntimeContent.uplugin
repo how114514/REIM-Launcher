@@ -1,0 +1,19 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "0.1",
+	"FriendlyName": "REIM Runtime Content",
+	"Description": "Stages the Host instance template and configuration for the REIM Runtime. Contains no Mojang assets and no version-specific DLL.",
+	"Category": "REIM",
+	"CreatedBy": "",
+	"CanContainContent": true,
+	"IsBetaVersion": true,
+	"Installed": false,
+	"Modules": [
+		{
+			"Name": "REIMRuntimeContent",
+			"Type": "Runtime",
+			"LoadingPhase": "PostConfigInit"
+		}
+	]
+}

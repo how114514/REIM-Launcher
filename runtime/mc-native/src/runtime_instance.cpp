@@ -2,21 +2,65 @@
 
 #include "data/generated_manifest.h"
 #include "util/file.h"
+#include "util/hash.h"
 #include "util/log.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdio>
 #include <cstring>
 #include <mutex>
 #include <string_view>
 #include <vector>
 
+#include "json.hpp"
+
 namespace reim::runtime {
 namespace {
 
 constexpr uint32_t kExpectedAbi = REIM_ABI_VERSION;
 constexpr const char* kExpectedProfile = "26.3";
+constexpr const char* kBuildId = "reim-runtime-26.3-abi2";
 constexpr auto kTickPeriod = std::chrono::milliseconds(50);
+constexpr size_t kBlobAlignment = 16;
+
+size_t align_up(size_t value, size_t alignment) {
+  return (value + alignment - 1) & ~(alignment - 1);
+}
+
+uint64_t digest_prefix(const reim::hash::Digest32& digest) {
+  uint64_t value = 0;
+  for (int i = 0; i < 8; ++i) value = (value << 8) | digest[static_cast<size_t>(i)];
+  return value;
+}
+
+void fill_camera(const core::Player& player, float render_distance,
+                 ReimCameraSnapshot& out) {
+  out.position.x = static_cast<float>(player.x);
+  out.position.y = static_cast<float>(player.y + core::kPlayerEyeHeight);
+  out.position.z = static_cast<float>(player.z);
+  out.yaw = player.yaw;
+  out.pitch = player.pitch;
+  out.fov_y_degrees = 70.0f;
+  out.near_z = 0.05f;
+  out.far_z = (render_distance + 1.0f) * 16.0f;
+  out.dimension = 0;
+}
+
+void fill_player(const core::Player& player, ReimPlayerSnapshot& out) {
+  out.position.x = static_cast<float>(player.x);
+  out.position.y = static_cast<float>(player.y);
+  out.position.z = static_cast<float>(player.z);
+  out.velocity.x = static_cast<float>(player.vx);
+  out.velocity.y = static_cast<float>(player.vy);
+  out.velocity.z = static_cast<float>(player.vz);
+  out.yaw = player.yaw;
+  out.pitch = player.pitch;
+  out.eye_height = static_cast<float>(core::kPlayerEyeHeight);
+  out.half_width = static_cast<float>(core::kPlayerHalfWidth);
+  out.height = static_cast<float>(core::kPlayerHeight);
+  out.flags = player.flags;
+}
 
 // The log sink is process-wide (one per DLL, not per instance). Keep every live
 // Host that supplied a log callback so instances do not overwrite each other.
@@ -120,6 +164,24 @@ RuntimeInstance* RuntimeInstance::create(const ReimInstanceConfig* config,
   }
   if (config->struct_size < REIM_INSTANCE_CONFIG_MIN_SIZE) return nullptr;
   if (!config->generated_path) return nullptr;
+  if (config->render_level != 0) {
+    *out_error = REIM_ERR_CAPABILITY;
+    if (host && host->log) {
+      const std::string message =
+          "create: render_level " + std::to_string(config->render_level) +
+          " is not supported (M2 is R0 only)";
+      host->log(REIM_LOG_ERROR, "runtime", message.c_str());
+    }
+    return nullptr;
+  }
+  /* v2 frame ownership requires a Host allocator (reim_abi.h). */
+  if (!host || !host->alloc || !host->free) {
+    if (host && host->log) {
+      host->log(REIM_LOG_ERROR, "runtime",
+                "create: host alloc/free callbacks are required in ABI v2");
+    }
+    return nullptr;
+  }
 
   const std::filesystem::path generated_dir(config->generated_path);
   reim::data::GeneratedManifest manifest;
@@ -159,35 +221,62 @@ RuntimeInstance* RuntimeInstance::create(const ReimInstanceConfig* config,
   sim_config.spawn_x = config->spawn_x;
   sim_config.spawn_y = config->spawn_y;
   sim_config.spawn_z = config->spawn_z;
+  sim_config.spawn_yaw = config->spawn_yaw;
+  sim_config.spawn_pitch = config->spawn_pitch;
   sim_config.mouse_sensitivity =
       config->mouse_sensitivity > 0.0f ? config->mouse_sensitivity : 0.15f;
   sim_config.invert_y = config->invert_y != 0;
 
-  // Route the core library's log lines to the Host callback as well. This is
-  // registered for the lifetime of the instance and is safe with multiple
-  // instances (each Host receives every line).
-  register_host(host);
-
   auto* instance = new RuntimeInstance();
-  instance->host_ = host;
+  instance->host_ = *host;
   instance->render_distance_ = sim_config.render_distance;
+  // Route the core library's log lines to the instance's Host copy for the
+  // lifetime of the instance; the caller's struct may go out of scope.
+  register_host(&instance->host_);
+  instance->registered_host_ = &instance->host_;
   if (!instance->simulation_.open(sim_config, error)) {
-    if (host && host->log) {
+    if (host->log) {
       const std::string message = "create: " + error;
       host->log(REIM_LOG_ERROR, "runtime", message.c_str());
     }
     *out_error = error.rfind("generated", 0) == 0 ? REIM_ERR_PARSE : REIM_ERR_NO_WORLD;
-    unregister_host(host);
+    unregister_host(instance->registered_host_);
     delete instance;
     return nullptr;
   }
-  instance->registered_host_ = host;
+  instance->build_id_ = kBuildId;
+  std::string manifest_text;
+  if (!reim::file::read_text(generated_dir / "manifest.json", manifest_text, error)) {
+    if (host->log) host->log(REIM_LOG_ERROR, "runtime", error.c_str());
+    unregister_host(instance->registered_host_);
+    delete instance;
+    *out_error = REIM_ERR_IO;
+    return nullptr;
+  }
+  instance->manifest_hash_ = digest_prefix(reim::hash::sha256(manifest_text));
+  if (!instance->load_assets(generated_dir, error)) {
+    if (host->log) {
+      const std::string message = "create: assets rejected: " + error;
+      host->log(REIM_LOG_ERROR, "runtime", message.c_str());
+    }
+    unregister_host(instance->registered_host_);
+    delete instance;
+    *out_error = REIM_ERR_IO;
+    return nullptr;
+  }
+  if (config->native_version_path && host->log) {
+    const std::string message =
+        "native_version=" + reim::file::to_utf8(std::filesystem::path(
+                                config->native_version_path));
+    host->log(REIM_LOG_INFO, "runtime", message.c_str());
+  }
   *out_error = REIM_OK;
   return instance;
 }
 
 RuntimeInstance::~RuntimeInstance() {
   stop();
+  free_outstanding_frames();
   unregister_host(registered_host_);
 }
 
@@ -248,6 +337,12 @@ void RuntimeInstance::run() {
 
 void RuntimeInstance::publish_status(const core::SimStatus& status) {
   std::lock_guard<std::mutex> lock(frame_mutex_);
+  if (!has_prev_status_) {
+    prev_status_ = status;
+    has_prev_status_ = true;
+  } else if (status.tick != latest_status_.tick) {
+    prev_status_ = latest_status_;
+  }
   pending_.status = status;
   latest_status_ = status;
 }
@@ -314,6 +409,14 @@ int32_t RuntimeInstance::fetch_frame(ReimRenderFrame* out) {
   if (!out) return REIM_ERR_INVALID_ARGUMENT;
   if (out->struct_size < REIM_RENDER_FRAME_MIN_SIZE) return REIM_ERR_INVALID_ARGUMENT;
   if (!started_.load()) return REIM_ERR_NOT_STARTED;
+  if (!host_.alloc || !host_.free) return REIM_ERR_INTERNAL;
+
+  /* Backpressure: never block the simulation on Host consumption. */
+  if (outstanding_count() >= REIM_MAX_PENDING_FRAMES) {
+    log_message(REIM_LOG_WARN, "frame",
+                "fetch_frame: Host has 4 unreleased frame blobs; returning BUSY");
+    return REIM_ERR_BUSY;
+  }
 
   const auto now = std::chrono::steady_clock::now();
   float frame_ms = 0.0f;
@@ -324,19 +427,89 @@ int32_t RuntimeInstance::fetch_frame(ReimRenderFrame* out) {
 
   std::lock_guard<std::mutex> lock(frame_mutex_);
   std::swap(pending_, published_);
-  pending_.keep.clear();
-  pending_.updates.clear();
-  pending_.removes.clear();
-  pending_.status = published_.status;
 
   FrameState& frame = published_;
-  frame.frame_id = ++frame_counter_;
+  const size_t update_count = frame.updates.size();
+  const size_t remove_count = frame.removes.size();
+
+  auto reject = [&](int32_t code, const char* reason) {
+    // Put the new events back so the Host can retry without losing sections.
+    std::swap(pending_, published_);
+    log_message(REIM_LOG_WARN, "frame", std::string("fetch_frame: ") + reason);
+    return code;
+  };
+  if (update_count > REIM_MAX_FRAME_UPDATES) {
+    return reject(REIM_ERR_LIMIT, "update count exceeds REIM_MAX_FRAME_UPDATES");
+  }
+  if (remove_count > REIM_MAX_FRAME_REMOVES) {
+    return reject(REIM_ERR_LIMIT, "remove count exceeds REIM_MAX_FRAME_REMOVES");
+  }
+
+  const size_t updates_off = 0;
+  const size_t removes_off = align_up(update_count * sizeof(ReimSectionMeshUpdate),
+                                      kBlobAlignment);
+  size_t offset = align_up(removes_off + remove_count * sizeof(ReimSectionRemove),
+                           kBlobAlignment);
+  std::vector<size_t> vertex_off(update_count, 0);
+  std::vector<size_t> index_off(update_count, 0);
+  for (size_t i = 0; i < update_count; ++i) {
+    const ReimSectionMeshUpdate& update = frame.updates[i];
+    vertex_off[i] = align_up(offset, kBlobAlignment);
+    offset = vertex_off[i] +
+             static_cast<size_t>(update.vertex_count) * sizeof(ReimVertex);
+    index_off[i] = align_up(offset, alignof(uint32_t));
+    offset = index_off[i] +
+             static_cast<size_t>(update.index_count) * sizeof(uint32_t);
+  }
+  /* Every successful frame owns a blob so frame/release accounting is
+   * deterministic, even when the frame carries no mesh data. */
+  const size_t total_bytes =
+      std::max(align_up(offset, kBlobAlignment), static_cast<size_t>(64));
+  if (total_bytes > REIM_MAX_FRAME_BYTES) {
+    return reject(REIM_ERR_LIMIT, "frame blob exceeds REIM_MAX_FRAME_BYTES");
+  }
+
+  void* block = host_.alloc(total_bytes, kBlobAlignment);
+  if (!block) {
+    return reject(REIM_ERR_INTERNAL, "host alloc failed");
+  }
+  auto* base = static_cast<uint8_t*>(block);
+  auto* out_updates = reinterpret_cast<ReimSectionMeshUpdate*>(base + updates_off);
+  if (update_count != 0) {
+    std::memcpy(out_updates, frame.updates.data(),
+                update_count * sizeof(ReimSectionMeshUpdate));
+  }
+  if (remove_count != 0) {
+    std::memcpy(base + removes_off, frame.removes.data(),
+                remove_count * sizeof(ReimSectionRemove));
+  }
+  for (size_t i = 0; i < update_count; ++i) {
+    const ReimSectionMeshUpdate& source = frame.updates[i];
+    ReimSectionMeshUpdate& target = out_updates[i];
+    target.vertices = nullptr;
+    target.indices = nullptr;
+    if (source.vertex_count != 0 && source.vertices != nullptr) {
+      auto* dst = reinterpret_cast<ReimVertex*>(base + vertex_off[i]);
+      std::memcpy(dst, source.vertices,
+                  static_cast<size_t>(source.vertex_count) * sizeof(ReimVertex));
+      target.vertices = dst;
+    }
+    if (source.index_count != 0 && source.indices != nullptr) {
+      auto* dst = reinterpret_cast<uint32_t*>(base + index_off[i]);
+      std::memcpy(dst, source.indices,
+                  static_cast<size_t>(source.index_count) * sizeof(uint32_t));
+      target.indices = dst;
+    }
+  }
+
+  const uint64_t frame_id = ++frame_counter_;
   const core::SimStatus& status = frame.status;
 
-  std::memset(out, 0, sizeof(*out));
+  const size_t host_struct_size = out->struct_size;
+  std::memset(out, 0, std::min(host_struct_size, sizeof(*out)));
   out->struct_size = sizeof(*out);
   out->abi_version = kExpectedAbi;
-  out->frame_id = frame.frame_id;
+  out->frame_id = frame_id;
   out->tick = status.tick;
   out->partial_tick = partial_tick_.load();
   out->ready = status.ready ? 1u : 0u;
@@ -344,46 +517,196 @@ int32_t RuntimeInstance::fetch_frame(ReimRenderFrame* out) {
   out->total_chunks = status.total_chunks;
   out->loading_percent = status.loading_percent;
 
-  out->camera.position.x = static_cast<float>(status.player.x);
-  out->camera.position.y =
-      static_cast<float>(status.player.y + core::kPlayerEyeHeight);
-  out->camera.position.z = static_cast<float>(status.player.z);
-  out->camera.yaw = status.player.yaw;
-  out->camera.pitch = status.player.pitch;
-  out->camera.fov_y_degrees = 70.0f;
-  out->camera.near_z = 0.05f;
-  out->camera.far_z = static_cast<float>(render_distance_ + 1) * 16.0f;
-  out->camera.dimension = 0;
+  fill_camera(status.player, static_cast<float>(render_distance_), out->camera);
+  fill_player(status.player, out->player);
 
-  out->player.position.x = static_cast<float>(status.player.x);
-  out->player.position.y = static_cast<float>(status.player.y);
-  out->player.position.z = static_cast<float>(status.player.z);
-  out->player.velocity.x = static_cast<float>(status.player.vx);
-  out->player.velocity.y = static_cast<float>(status.player.vy);
-  out->player.velocity.z = static_cast<float>(status.player.vz);
-  out->player.yaw = status.player.yaw;
-  out->player.pitch = status.player.pitch;
-  out->player.eye_height = static_cast<float>(core::kPlayerEyeHeight);
-  out->player.half_width = static_cast<float>(core::kPlayerHalfWidth);
-  out->player.height = static_cast<float>(core::kPlayerHeight);
-  out->player.flags = status.player.flags;
+  /* Interpolation snapshot: prev_* is the previous published tick. When the
+   * simulation has not advanced (pause/loading) alpha stays 0 and prev equals
+   * the current snapshot (reim_render.h). */
+  bool advanced = has_prev_status_ && status.tick > prev_status_.tick;
+  const core::Player& prev_player = advanced ? prev_status_.player : status.player;
+  fill_camera(prev_player, static_cast<float>(render_distance_), out->prev_camera);
+  fill_player(prev_player, out->prev_player);
+  out->tick_alpha =
+      (advanced && !paused_.load()) ? std::clamp(partial_tick_.load(), 0.0f, 1.0f)
+                                    : 0.0f;
 
   out->environment.sky_color = 0x78A7FFu;
   out->environment.fog_color = 0xB0C8FFu;
   out->environment.fog_start = out->camera.far_z * 0.6f;
   out->environment.fog_end = out->camera.far_z;
 
-  out->update_count = static_cast<uint32_t>(frame.updates.size());
-  out->remove_count = static_cast<uint32_t>(frame.removes.size());
-  out->updates = frame.updates.empty() ? nullptr : frame.updates.data();
-  out->removes = frame.removes.empty() ? nullptr : frame.removes.data();
+  out->update_count = static_cast<uint32_t>(update_count);
+  out->remove_count = static_cast<uint32_t>(remove_count);
+  out->updates =
+      update_count == 0 ? nullptr : reinterpret_cast<const ReimSectionMeshUpdate*>(
+                                         static_cast<uint8_t*>(block) + updates_off);
+  out->removes =
+      remove_count == 0 ? nullptr : reinterpret_cast<const ReimSectionRemove*>(
+                                        static_cast<uint8_t*>(block) + removes_off);
   out->loaded_sections = status.loaded_sections;
   out->mesh_sections = status.mesh_sections;
   out->block_count = status.block_count;
   out->measured_tps = status.measured_tps;
   out->measured_frame_ms = frame_ms;
   out->third_person_distance = status.third_person_distance;
+  out->owned_block = block;
+  out->owned_bytes = block ? total_bytes : 0;
+
+  /* The blob now owns the mesh bytes; the Runtime no longer needs the source
+   * buffers or the previous frame's event lists. */
+  frame.keep.clear();
+  frame.updates.clear();
+  frame.removes.clear();
+  pending_.keep.clear();
+  pending_.updates.clear();
+  pending_.removes.clear();
+  pending_.status = status;
+
+  if (block != nullptr) {
+    std::lock_guard<std::mutex> out_lock(frames_out_mutex_);
+    outstanding_.push_back(OutstandingFrame{frame_id, block});
+  }
   return REIM_OK;
+}
+
+void RuntimeInstance::release_frame(uint64_t frame_id) {
+  std::lock_guard<std::mutex> lock(frames_out_mutex_);
+  const auto it = std::find_if(outstanding_.begin(), outstanding_.end(),
+                               [&](const OutstandingFrame& entry) {
+                                 return entry.frame_id == frame_id;
+                               });
+  if (it == outstanding_.end()) {
+    // Duplicate/unknown release: no-op beyond a diagnostic.
+    return;
+  }
+  void* block = it->block;
+  outstanding_.erase(it);
+  if (block != nullptr && host_.free) host_.free(block);
+}
+
+size_t RuntimeInstance::outstanding_count() {
+  std::lock_guard<std::mutex> lock(frames_out_mutex_);
+  return outstanding_.size();
+}
+
+void RuntimeInstance::free_outstanding_frames() {
+  std::vector<OutstandingFrame> blocks;
+  {
+    std::lock_guard<std::mutex> lock(frames_out_mutex_);
+    blocks.swap(outstanding_);
+  }
+  if (!host_.free) return;
+  for (const OutstandingFrame& entry : blocks) {
+    if (entry.block != nullptr) host_.free(entry.block);
+  }
+}
+
+bool RuntimeInstance::load_assets(const std::filesystem::path& generated_dir,
+                                  std::string& error) {
+  if (!reim::file::read_all(generated_dir / "atlas.png", atlas_png_, error)) {
+    return false;
+  }
+  if (atlas_png_.size() < 24) {
+    error = "atlas.png is too small to be a PNG";
+    return false;
+  }
+
+  uint32_t width = 0;
+  uint32_t height = 0;
+  uint32_t tile_size = 16;
+  std::string textures_text;
+  if (reim::file::read_text(generated_dir / "textures.json", textures_text, error)) {
+    const auto root = nlohmann::json::parse(textures_text.begin(), textures_text.end(),
+                                            nullptr, false);
+    if (!root.is_discarded() && root.is_object()) {
+      const auto atlas = root.find("atlas");
+      if (atlas != root.end() && atlas->is_object()) {
+        width = atlas->value("width", 0u);
+        height = atlas->value("height", 0u);
+        tile_size = atlas->value("tile_size", tile_size);
+      }
+    }
+  }
+  if (width == 0 || height == 0) {
+    // PNG IHDR: 8-byte signature, 4-byte length, "IHDR", width, height (BE).
+    const uint8_t* header = atlas_png_.data();
+    if (header[12] != 'I' || header[13] != 'H' || header[14] != 'D' ||
+        header[15] != 'R') {
+      error = "atlas.png has no IHDR chunk";
+      return false;
+    }
+    width = (static_cast<uint32_t>(header[16]) << 24) |
+            (static_cast<uint32_t>(header[17]) << 16) |
+            (static_cast<uint32_t>(header[18]) << 8) |
+            static_cast<uint32_t>(header[19]);
+    height = (static_cast<uint32_t>(header[20]) << 24) |
+             (static_cast<uint32_t>(header[21]) << 16) |
+             (static_cast<uint32_t>(header[22]) << 8) |
+             static_cast<uint32_t>(header[23]);
+  }
+  if (width == 0 || height == 0 || tile_size == 0) {
+    error = "atlas dimensions are invalid";
+    return false;
+  }
+
+  const auto digest = reim::hash::sha256(atlas_png_.data(), atlas_png_.size());
+  atlas_revision_ = digest_prefix(digest);
+  if (atlas_revision_ == 0) atlas_revision_ = 1;
+
+  nlohmann::json meta;
+  meta["width"] = width;
+  meta["height"] = height;
+  meta["tile_size"] = tile_size;
+  meta["padding"] = 0;
+  meta["sampling"] = "nearest";
+  meta["format"] = "rgba8";
+  meta["channels"] = 4;
+  meta["hash"] = reim::hash::hex(digest);
+  meta["source"] = "atlas.png";
+  atlas_meta_json_ = meta.dump();
+  return true;
+}
+
+int32_t RuntimeInstance::get_runtime_info(ReimRuntimeInfo* out) {
+  if (!out) return REIM_ERR_INVALID_ARGUMENT;
+  if (out->struct_size < REIM_RUNTIME_INFO_MIN_SIZE) return REIM_ERR_INVALID_ARGUMENT;
+  const size_t host_struct_size = out->struct_size;
+  std::memset(out, 0, std::min(host_struct_size, sizeof(*out)));
+  out->struct_size = sizeof(*out);
+  out->abi_version = kExpectedAbi;
+  std::snprintf(out->profile, sizeof(out->profile), "%s", kExpectedProfile);
+  std::snprintf(out->build_id, sizeof(out->build_id), "%s", build_id_.c_str());
+  out->manifest_hash = manifest_hash_;
+  out->capabilities = REIM_CAP_FRAME_BLOB | REIM_CAP_INTERPOLATION |
+                      REIM_CAP_ATLAS_ASSET | REIM_CAP_R0;
+  out->render_level = 0;
+  out->dll_abi_version = kExpectedAbi;
+  return REIM_OK;
+}
+
+int32_t RuntimeInstance::get_asset(uint32_t kind, const void** out_data,
+                                   uint64_t* out_size, uint64_t* out_revision) {
+  if (!out_data || !out_size || !out_revision) return REIM_ERR_INVALID_ARGUMENT;
+  *out_data = nullptr;
+  *out_size = 0;
+  *out_revision = 0;
+  switch (kind) {
+    case REIM_ASSET_ATLAS_PNG:
+      if (atlas_png_.empty()) return REIM_ERR_NOT_FOUND;
+      *out_data = atlas_png_.data();
+      *out_size = atlas_png_.size();
+      *out_revision = atlas_revision_;
+      return REIM_OK;
+    case REIM_ASSET_ATLAS_META:
+      if (atlas_meta_json_.empty()) return REIM_ERR_NOT_FOUND;
+      *out_data = atlas_meta_json_.data();
+      *out_size = atlas_meta_json_.size();
+      *out_revision = atlas_revision_;
+      return REIM_OK;
+    default:
+      return REIM_ERR_INVALID_ARGUMENT;
+  }
 }
 
 void RuntimeInstance::submit_input(const ReimInputEvent* event) {
@@ -458,8 +781,8 @@ int32_t RuntimeInstance::get_status_json(char* buffer, uint32_t buffer_size) {
 
 void RuntimeInstance::log_message(int32_t level, const char* category,
                                   const std::string& message) {
-  if (host_ && host_->log) {
-    host_->log(level, category, message.c_str());
+  if (host_.log) {
+    host_.log(level, category, message.c_str());
     return;
   }
   reim::log::write(static_cast<reim::log::Level>(level), category, message);

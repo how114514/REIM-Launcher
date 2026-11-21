@@ -51,6 +51,7 @@
 #include <format>
 #include <fstream>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -74,6 +75,14 @@ struct Options {
   bool third_person = false;
   bool show_aabb = false;
   double auto_walk_seconds = 0.0;
+  uint64_t auto_walk_ticks = 0;
+  uint64_t exit_tick = 0;
+  bool spawn_override = false;
+  float spawn_x = 0.0f;
+  float spawn_y = 0.0f;
+  float spawn_z = 0.0f;
+  float spawn_yaw = 0.0f;
+  float spawn_pitch = 0.0f;
   bool help = false;
   bool version = false;
 };
@@ -108,6 +117,11 @@ void print_usage() {
       "  --third-person         start in the third-person debug view\n"
       "  --show-aabb            draw the player AABB at start\n"
       "  --auto-walk SECONDS    hold forward for N seconds once ready (diagnostics)\n"
+      "  --auto-walk-ticks N    hold forward for N simulation ticks once ready\n"
+      "  --spawn X Y Z          override spawn (diagnostics; same as UE instance)\n"
+      "  --spawn-yaw DEG        spawn yaw (with --spawn)\n"
+      "  --spawn-pitch DEG      spawn pitch (with --spawn)\n"
+      "  --exit-tick N          exit once the Runtime reaches tick N\n"
       "  --screenshot PATH      write the last frame as PNG\n"
       "  --report PATH          write a JSON run summary\n"
       "  --check-dll PATH       validate the DLL ABI without a window\n"
@@ -175,6 +189,33 @@ bool parse_options(int argc, char** argv, Options& options) {
       std::string value;
       if (!next(value)) return false;
       options.auto_walk_seconds = std::atof(value.c_str());
+    } else if (arg == "--auto-walk-ticks") {
+      std::string value;
+      if (!next(value)) return false;
+      options.auto_walk_ticks =
+          static_cast<uint64_t>(std::strtoull(value.c_str(), nullptr, 10));
+    } else if (arg == "--exit-tick") {
+      std::string value;
+      if (!next(value)) return false;
+      options.exit_tick =
+          static_cast<uint64_t>(std::strtoull(value.c_str(), nullptr, 10));
+    } else if (arg == "--spawn") {
+      std::string x;
+      std::string y;
+      std::string z;
+      if (!next(x) || !next(y) || !next(z)) return false;
+      options.spawn_override = true;
+      options.spawn_x = static_cast<float>(std::atof(x.c_str()));
+      options.spawn_y = static_cast<float>(std::atof(y.c_str()));
+      options.spawn_z = static_cast<float>(std::atof(z.c_str()));
+    } else if (arg == "--spawn-yaw") {
+      std::string value;
+      if (!next(value)) return false;
+      options.spawn_yaw = static_cast<float>(std::atof(value.c_str()));
+    } else if (arg == "--spawn-pitch") {
+      std::string value;
+      if (!next(value)) return false;
+      options.spawn_pitch = static_cast<float>(std::atof(value.c_str()));
     } else {
       std::fprintf(stderr, "unknown argument: %s\n", arg.c_str());
       return false;
@@ -203,6 +244,24 @@ const char* result_name(int32_t result) {
 void host_log(int32_t level, const char* category, const char* message) {
   reim::log::write(static_cast<reim::log::Level>(level), category ? category : "runtime",
                    message ? message : "");
+}
+
+/* ABI v2 requires a thread-safe alloc/free pair for host-owned frame blobs. */
+void* REIM_CALL host_alloc(size_t size, size_t align) {
+  if (align < alignof(std::max_align_t)) align = alignof(std::max_align_t);
+#if defined(_MSC_VER)
+  return _aligned_malloc(size, align);
+#else
+  return std::aligned_alloc(align, (size + align - 1) & ~(align - 1));
+#endif
+}
+
+void REIM_CALL host_free(void* ptr) {
+#if defined(_MSC_VER)
+  _aligned_free(ptr);
+#else
+  std::free(ptr);
+#endif
 }
 
 std::string find_generated_dir(const Options& options) {
@@ -334,6 +393,8 @@ int check_generated(const std::string& dll_path, const std::string& generated_pa
   ReimHostApi host{};
   host.struct_size = sizeof(host);
   host.abi_version = REIM_ABI_VERSION;
+  host.alloc = &host_alloc;
+  host.free = &host_free;
   host.log = &host_log;
 
   int32_t error = 0;
@@ -370,6 +431,8 @@ struct HostState {
   bool paused = false;
   bool show_hud = true;
   double auto_walk_seconds = 0.0;
+  uint64_t auto_walk_ticks = 0;
+  uint64_t auto_walk_ready_tick = 0;
   bool auto_walk_started = false;
   bool auto_walk_finished = false;
   std::chrono::steady_clock::time_point auto_walk_start;
@@ -664,7 +727,8 @@ void draw_hud(reim::preview::Hud& hud, const ReimRenderFrame& frame,
 void write_report(const std::string& path, const ReimRenderFrame& frame,
                   const reim::preview::RenderStats& render_stats, uint64_t frames,
                   double elapsed_seconds, double average_fps, const std::string& screenshot,
-                  const std::string& exit_reason, float auto_walk_distance) {
+                  const std::string& exit_reason, float auto_walk_distance,
+                  const std::string& status_json) {
   if (path.empty()) return;
   std::error_code ec;
   const std::filesystem::path report_path(path);
@@ -703,7 +767,9 @@ void write_report(const std::string& path, const ReimRenderFrame& frame,
       << ", \"flags\": " << frame.player.flags << "},\n";
   out << "  \"third_person_distance\": " << frame.third_person_distance << ",\n";
   out << "  \"auto_walk_distance\": " << auto_walk_distance << ",\n";
-  out << "  \"screenshot\": \"" << json_escape(screenshot) << "\"\n";
+  out << "  \"screenshot\": \"" << json_escape(screenshot) << "\",\n";
+  out << "  \"status\": " << (status_json.empty() ? std::string("{}") : status_json)
+      << "\n";
   out << "}\n";
   out.flush();
   if (!out) {
@@ -875,16 +941,6 @@ int main(int argc, char** argv) {
 
   reim::preview::Renderer renderer;
   std::string render_error;
-  if (!renderer.initialize(generated, render_error)) {
-    reim::log::error("preview", render_error);
-    glfwDestroyWindow(window);
-    glfwTerminate();
-#ifdef _WIN32
-    ::FreeLibrary(dll.module);
-    if (log_file) std::fclose(log_file);
-#endif
-    return 7;
-  }
   reim::preview::Hud hud;
   std::string hud_error;
   if (!hud.initialize(hud_error)) {
@@ -909,6 +965,8 @@ int main(int argc, char** argv) {
   ReimHostApi host{};
   host.struct_size = sizeof(host);
   host.abi_version = REIM_ABI_VERSION;
+  host.alloc = &host_alloc;
+  host.free = &host_free;
   host.log = &host_log;
 
   ReimInstanceConfig config{};
@@ -921,6 +979,14 @@ int main(int argc, char** argv) {
   config.flags = 0;
   config.mouse_sensitivity = options.sensitivity;
   config.invert_y = options.invert_y ? 1u : 0u;
+  if (options.spawn_override) {
+    config.flags |= REIM_CONFIG_FLAG_SPAWN_OVERRIDE;
+    config.spawn_x = options.spawn_x;
+    config.spawn_y = options.spawn_y;
+    config.spawn_z = options.spawn_z;
+    config.spawn_yaw = options.spawn_yaw;
+    config.spawn_pitch = options.spawn_pitch;
+  }
 
   int32_t create_error = 0;
   ReimInstance* instance = dll.api->create(&config, &host, &create_error);
@@ -937,6 +1003,40 @@ int main(int argc, char** argv) {
 #endif
     return 5;
   }
+
+  /* Prefer the ABI v2 atlas asset; the generated/ file is only a diagnostic
+   * fallback if the Runtime cannot deliver it. */
+  const void* atlas_bytes = nullptr;
+  uint64_t atlas_size = 0;
+  uint64_t atlas_revision = 0;
+  const bool have_asset =
+      dll.api->get_asset(instance, REIM_ASSET_ATLAS_PNG, &atlas_bytes, &atlas_size,
+                         &atlas_revision) == REIM_OK &&
+      atlas_bytes != nullptr && atlas_size != 0;
+  const bool atlas_ok =
+      have_asset ? renderer.initialize_from_png(
+                       static_cast<const uint8_t*>(atlas_bytes),
+                       static_cast<size_t>(atlas_size),
+                       std::format("get_asset(ATLAS_PNG, revision {})", atlas_revision),
+                       render_error)
+                 : renderer.initialize(generated, render_error);
+  if (!atlas_ok) {
+    reim::log::error("preview", render_error);
+    dll.api->destroy(instance);
+    hud.shutdown();
+    glfwDestroyWindow(window);
+    glfwTerminate();
+#ifdef _WIN32
+    ::FreeLibrary(dll.module);
+    if (log_file) std::fclose(log_file);
+#endif
+    return 7;
+  }
+  if (!have_asset) {
+    reim::log::warn("preview",
+                    "get_asset(ATLAS_PNG) failed; using generated/atlas.png fallback");
+  }
+
   const int32_t start_result = dll.api->start(instance);
   if (start_result != REIM_OK) {
     reim::log::error("preview", std::format("start failed: {} ({})",
@@ -959,6 +1059,7 @@ int main(int argc, char** argv) {
   state.third_person = options.third_person;
   state.debug_aabb = options.show_aabb;
   state.auto_walk_seconds = options.auto_walk_seconds;
+  state.auto_walk_ticks = options.auto_walk_ticks;
   glfwSetWindowUserPointer(window, &state);
   glfwSetKeyCallback(window, &key_callback);
   glfwSetCursorPosCallback(window, &cursor_callback);
@@ -1000,6 +1101,8 @@ int main(int argc, char** argv) {
     }
     last_frame = frame;
     renderer.apply_frame(frame);
+    /* The GL upload above is synchronous; the blob is consumed. */
+    dll.api->release_frame(instance, frame.frame_id);
 
     reim::preview::RenderOptions render_options;
     render_options.third_person = state.third_person;
@@ -1037,29 +1140,37 @@ int main(int argc, char** argv) {
     }
 
     // Optional automation: prove the Host -> ABI input path moves the player.
-    if (state.auto_walk_seconds > 0.0 && frame.ready) {
+    if ((state.auto_walk_seconds > 0.0 || state.auto_walk_ticks > 0) && frame.ready) {
       if (!state.auto_walk_started) {
         state.auto_walk_started = true;
         state.auto_walk_start = now;
+        state.auto_walk_ready_tick = frame.tick;
         state.auto_walk_from = frame.player.position;
         submit_key(state, REIM_KEY_W, REIM_ACTION_PRESS);
         reim::log::info("preview",
-                        std::format("auto-walk: holding W from ({:.2f},{:.2f},{:.2f})",
+                        std::format("auto-walk: holding W from ({:.2f},{:.2f},{:.2f}) "
+                                    "at tick {}",
                                     state.auto_walk_from.x, state.auto_walk_from.y,
-                                    state.auto_walk_from.z));
+                                    state.auto_walk_from.z, frame.tick));
       } else if (!state.auto_walk_finished) {
         const float dx = frame.player.position.x - state.auto_walk_from.x;
         const float dz = frame.player.position.z - state.auto_walk_from.z;
         state.auto_walk_distance = std::sqrt(dx * dx + dz * dz);
         const double walked =
             std::chrono::duration<double>(now - state.auto_walk_start).count();
-        if (walked >= state.auto_walk_seconds) {
+        const bool by_ticks = state.auto_walk_ticks > 0 &&
+                              frame.tick >= state.auto_walk_ready_tick +
+                                                 state.auto_walk_ticks;
+        const bool by_seconds = state.auto_walk_ticks == 0 &&
+                                walked >= state.auto_walk_seconds;
+        if (by_ticks || by_seconds) {
           state.auto_walk_finished = true;
           submit_key(state, REIM_KEY_W, REIM_ACTION_RELEASE);
           reim::log::info(
               "preview",
-              std::format("auto-walk complete: {:.2f} blocks horizontally in {:.2f}s",
-                          state.auto_walk_distance, walked));
+              std::format("auto-walk complete at tick {}: {:.2f} blocks horizontally "
+                          "in {:.2f}s",
+                          frame.tick, state.auto_walk_distance, walked));
         }
       }
     }
@@ -1098,6 +1209,10 @@ int main(int argc, char** argv) {
       last = true;
       exit_reason = "time_limit";
     }
+    if (options.exit_tick > 0 && frame.tick >= options.exit_tick) {
+      last = true;
+      exit_reason = "tick_limit";
+    }
     if (glfwWindowShouldClose(window)) {
       last = true;
       exit_reason = "window_closed";
@@ -1125,15 +1240,44 @@ int main(int argc, char** argv) {
     state.auto_walk_distance = std::sqrt(dx * dx + dz * dz);
   }
 
+  /* G1: freeze the simulation before exporting state so both hosts report the
+   * same tick and the Runtime's status JSON describes that frame. */
+  if (options.exit_tick > 0) {
+    dll.api->set_simulation_paused(instance, 1);
+    std::this_thread::sleep_for(std::chrono::milliseconds(60));
+    ReimRenderFrame frozen{};
+    frozen.struct_size = sizeof(frozen);
+    frozen.abi_version = REIM_ABI_VERSION;
+    if (dll.api->fetch_frame(instance, &frozen) == REIM_OK) {
+      last_frame = frozen;
+      dll.api->release_frame(instance, frozen.frame_id);
+      last_frame.updates = nullptr;
+      last_frame.removes = nullptr;
+      last_frame.owned_block = nullptr;
+    }
+  }
+
   const double average_fps =
       elapsed_seconds > 0.0 ? static_cast<double>(frames) / elapsed_seconds : 0.0;
   reim::log::info("preview",
                   std::format("exiting after {} frames in {:.2f}s ({:.1f} avg FPS) [{}]",
                               frames, elapsed_seconds, average_fps, exit_reason));
 
+  std::string status_json;
+  const int32_t status_needed = dll.api->get_status_json(instance, nullptr, 0);
+  if (status_needed > 0) {
+    std::vector<char> status_buffer(static_cast<size_t>(status_needed) + 1, '\0');
+    const int32_t status_written =
+        dll.api->get_status_json(instance, status_buffer.data(),
+                                 static_cast<uint32_t>(status_buffer.size()));
+    if (status_written > 0) {
+      status_json.assign(status_buffer.data(), static_cast<size_t>(status_written));
+    }
+  }
+
   write_report(options.report, last_frame, renderer.stats(), frames, elapsed_seconds,
                average_fps, screenshot_written ? options.screenshot : std::string(),
-               exit_reason, state.auto_walk_distance);
+               exit_reason, state.auto_walk_distance, status_json);
 
   release_mouse(window, state);
   dll.api->stop(instance);

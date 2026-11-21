@@ -6,6 +6,7 @@ add_executable(reim-convert
   extract.cpp
   model_resolver.cpp
   inspect_world.cpp
+  package.cpp
 )
 target_link_libraries(reim-convert PRIVATE
   reim_core

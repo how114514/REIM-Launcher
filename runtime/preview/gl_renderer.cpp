@@ -72,6 +72,9 @@ void main() {
 
   vec3 color = texel.rgb * v_tint.rgb * brightness;
   float alpha = texel.a * v_tint.a;
+  // Opaque pass is alpha-masked (leaves, grass crosses, flowers); water and
+  // other blended blocks keep their alpha.
+  if (u_transparent == 0 && alpha < 0.5) discard;
   if (u_transparent != 0) alpha *= 0.72;
 
   float distance = length(v_world - u_camera);
@@ -176,13 +179,19 @@ bool Renderer::initialize(const std::filesystem::path& generated_dir, std::strin
     error = "atlas: " + error;
     return false;
   }
+  return initialize_from_png(bytes.data(), bytes.size(),
+                             reim::file::to_utf8(atlas_path), error);
+}
+
+bool Renderer::initialize_from_png(const uint8_t* data, size_t size,
+                                   const std::string& source, std::string& error) {
   int width = 0;
   int height = 0;
   int channels = 0;
-  stbi_uc* pixels = stbi_load_from_memory(bytes.data(), static_cast<int>(bytes.size()),
+  stbi_uc* pixels = stbi_load_from_memory(data, static_cast<int>(size),
                                           &width, &height, &channels, 4);
   if (pixels == nullptr) {
-    error = "cannot decode " + reim::file::to_utf8(atlas_path);
+    error = "cannot decode " + source;
     return false;
   }
 
@@ -212,8 +221,7 @@ bool Renderer::initialize(const std::filesystem::path& generated_dir, std::strin
   glBindVertexArray(0);
 
   reim::log::info("preview", "atlas " + std::to_string(width) + "x" +
-                                 std::to_string(height) + " loaded from " +
-                                 reim::file::to_utf8(atlas_path));
+                                 std::to_string(height) + " loaded from " + source);
   return true;
 }
 

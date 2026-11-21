@@ -58,7 +58,7 @@ void LoadedChunk::build(const data::BlockTable& blocks) {
     std::vector<uint32_t>& ids = section_block_ids[i];
     ids.reserve(section.palette.size());
     for (const world::BlockState& state : section.palette) {
-      ids.push_back(blocks.find(state.name));
+      ids.push_back(blocks.find_state(state.name, state.properties));
     }
     if (!section.non_empty()) continue;
     ++non_empty_sections;
@@ -130,6 +130,8 @@ void Simulation::build_spawn() {
     player_.x = config_.spawn_x;
     player_.y = config_.spawn_y;
     player_.z = config_.spawn_z;
+    player_.yaw = config_.spawn_yaw;
+    player_.pitch = std::clamp(config_.spawn_pitch, -90.0f, 90.0f);
     return;
   }
   const world::LevelInfo& level = world_.level();

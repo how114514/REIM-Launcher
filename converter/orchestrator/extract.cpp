@@ -1,5 +1,7 @@
 #include "extract.h"
 
+#include "reim_abi.h"
+
 #include "model_resolver.h"
 #include "prepare.h"
 #include "util/file.h"
@@ -27,7 +29,20 @@ struct BlockStateInfo {
   std::string model;
   std::string representative_variant;
   std::map<std::string, std::set<std::string>> properties;
+  /* canonical state key -> model reference, for every variant of the block. */
+  std::map<std::string, std::string> variant_models;
   int variant_count = 0;
+};
+
+/* One resolved visual state (base block or a specific property variant). */
+struct Visual {
+  bool full_block = false;
+  std::string render_class = "skip";
+  Json sprites = Json::object();
+  Json tints = Json::object();
+  Json tint_kinds = Json::object();
+  Json geometry = Json::array();
+  std::string signature;
 };
 
 struct ExtractedBlock {
@@ -40,6 +55,9 @@ struct ExtractedBlock {
   Json properties = Json::object();
   Json sprites = Json::object();
   Json tints = Json::object();
+  Json tint_kinds = Json::object();
+  Json geometry = Json::array();
+  std::map<std::string, Json> variants; // state key -> visual override object
   std::string model;
   int variant_count = 0;
   std::string representative_variant;
@@ -112,6 +130,33 @@ void collect_variant_key(const std::string& key,
   }
 }
 
+/* Property strings are sorted the same way the Runtime builds a state key from
+ * its std::map of palette properties. */
+std::string canonical_state_key(const std::string& key) {
+  std::map<std::string, std::string> pairs;
+  size_t start = 0;
+  while (start < key.size()) {
+    const size_t comma = key.find(',', start);
+    const std::string part = key.substr(start, comma == std::string::npos
+                                                   ? std::string::npos
+                                                   : comma - start);
+    const size_t equals = part.find('=');
+    if (equals != std::string::npos) {
+      pairs[part.substr(0, equals)] = part.substr(equals + 1);
+    }
+    if (comma == std::string::npos) break;
+    start = comma + 1;
+  }
+  std::string out;
+  for (const auto& [name, value] : pairs) {
+    if (!out.empty()) out += ',';
+    out += name;
+    out += '=';
+    out += value;
+  }
+  return out;
+}
+
 bool get_model_from_apply(const Json& apply, std::string& model) {
   if (apply.is_object()) {
     if (apply.contains("model") && apply["model"].is_string()) {
@@ -174,6 +219,7 @@ bool parse_blockstate(const Json& root, BlockStateInfo& out, std::string& error)
         get_model_from_apply(it.value(), model);
       }
       if (model.empty()) continue;
+      out.variant_models.emplace(canonical_state_key(it.key()), model);
       const int score = variant_default_score(it.key());
       if (score < best_score) {
         best_score = score;
@@ -286,6 +332,203 @@ void blit_texture(std::vector<uint8_t>& atlas, int atlas_width, int x0, int y0,
   }
 }
 
+int parse_hex_color(const Json& value, int fallback) {
+  if (value.is_number_integer()) {
+    const int64_t number = value.get<int64_t>();
+    return number >= 0 && number <= 0xFFFFFFFF ? static_cast<int>(number) : fallback;
+  }
+  if (!value.is_string()) return fallback;
+  const std::string text = value.get<std::string>();
+  size_t index = 0;
+  if (!text.empty() && text[0] == '#') index = 1;
+  if (text.size() - index != 6) return fallback;
+  int color = 0;
+  for (size_t i = index; i < text.size(); ++i) {
+    const char c = text[i];
+    int digit = -1;
+    if (c >= '0' && c <= '9') digit = c - '0';
+    else if (c >= 'a' && c <= 'f') digit = c - 'a' + 10;
+    else if (c >= 'A' && c <= 'F') digit = c - 'A' + 10;
+    if (digit < 0) return fallback;
+    color = (color << 4) | digit;
+  }
+  return static_cast<int>(0xFF000000u | static_cast<uint32_t>(color));
+}
+
+/* Vanilla's triangular colormap lookup: temperature on the horizontal axis,
+ * temperature*downfall on the vertical one. */
+int colormap_color(const png::Image& map, double temperature, double downfall) {
+  if (map.width <= 0 || map.height <= 0) return static_cast<int>(0xFFFFFFFFu);
+  const double t = std::clamp(temperature, 0.0, 1.0);
+  const double d = std::clamp(downfall, 0.0, 1.0) * t;
+  int x = static_cast<int>((1.0 - t) * 255.0);
+  int y = static_cast<int>((1.0 - d) * 255.0);
+  x = std::clamp(x, 0, map.width - 1);
+  y = std::clamp(y, 0, map.height - 1);
+  const uint8_t* pixel = map.at(x, y);
+  return static_cast<int>(0xFF000000u | (static_cast<uint32_t>(pixel[0]) << 16) |
+                          (static_cast<uint32_t>(pixel[1]) << 8) | pixel[2]);
+}
+
+Json collect_biome_tints(const zip::Archive& archive,
+                         const std::string& profile,
+                         std::vector<std::string>& warnings) {
+  Json grass_map;
+  Json foliage_map;
+  auto load_map = [&](const char* sprite, Json& out) {
+    std::vector<uint8_t> bytes;
+    std::string error;
+    png::Image image;
+    if (!archive.read(std::string("assets/minecraft/textures/colormap/") + sprite +
+                          ".png",
+                      bytes, error) ||
+        !png::load_memory(bytes.data(), bytes.size(), 3, image, error)) {
+      warnings.push_back(std::string("biome tint: missing colormap ") + sprite);
+      return;
+    }
+    out = Json{{"width", image.width},
+               {"height", image.height},
+               {"pixels", image.pixels}};
+  };
+  load_map("grass", grass_map);
+  load_map("foliage", foliage_map);
+
+  auto sample = [&](const Json& map, double temperature, double downfall) {
+    if (!map.is_object()) return static_cast<int>(0xFFFFFFFFu);
+    png::Image image;
+    image.width = map["width"].get<int>();
+    image.height = map["height"].get<int>();
+    image.channels = 3;
+    image.pixels = map["pixels"].get<std::vector<uint8_t>>();
+    return colormap_color(image, temperature, downfall);
+  };
+
+  Json biomes = Json::object();
+  const auto entries = archive.list("data/minecraft/worldgen/biome/");
+  for (const std::string& entry : entries) {
+    if (entry.size() < 5 || entry.substr(entry.size() - 5) != ".json") continue;
+    std::vector<uint8_t> bytes;
+    std::string error;
+    if (!archive.read(entry, bytes, error)) continue;
+    const Json root = parse_json_noexcept(
+        std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size()));
+    if (root.is_discarded() || !root.is_object()) continue;
+
+    std::string name = entry.substr(std::string("data/minecraft/worldgen/biome/").size());
+    name.resize(name.size() - 5);
+    const double temperature = root.contains("temperature") && root["temperature"].is_number()
+                                   ? root["temperature"].get<double>()
+                                   : 0.5;
+    const double downfall = root.contains("downfall") && root["downfall"].is_number()
+                                ? root["downfall"].get<double>()
+                                : 0.5;
+    const Json* effects =
+        root.contains("effects") && root["effects"].is_object() ? &root["effects"] : nullptr;
+
+    int grass = 0;
+    if (effects != nullptr && effects->contains("grass_color")) {
+      grass = parse_hex_color((*effects)["grass_color"], 0);
+    }
+    if (grass == 0) grass = sample(grass_map, temperature, downfall);
+    int foliage = 0;
+    if (effects != nullptr && effects->contains("foliage_color")) {
+      foliage = parse_hex_color((*effects)["foliage_color"], 0);
+    }
+    if (foliage == 0) foliage = sample(foliage_map, temperature, downfall);
+    int water = 0xFF3F76E4;
+    if (effects != nullptr && effects->contains("water_color")) {
+      water = parse_hex_color((*effects)["water_color"], 0xFF3F76E4);
+    }
+    biomes["minecraft:" + name] =
+        Json{{"grass", static_cast<uint32_t>(grass)},
+             {"foliage", static_cast<uint32_t>(foliage)},
+             {"water", static_cast<uint32_t>(water)}};
+  }
+
+  Json out;
+  out["schema"] = "reim.biome_tints";
+  out["format"] = 2;
+  out["profile"] = profile;
+  out["source"] = "client.jar:data/minecraft/worldgen/biome + colormap";
+  out["biome_count"] = biomes.size();
+  out["biomes"] = biomes;
+  return out;
+}
+
+const char* tint_kind_name(TintKind kind) {
+  switch (kind) {
+    case TintKind::grass: return "grass";
+    case TintKind::foliage: return "foliage";
+    case TintKind::water: return "water";
+    default: return nullptr;
+  }
+}
+
+Json quad_to_json(const ResolvedQuad& quad) {
+  Json entry;
+  entry["sprite"] = quad.sprite;
+  Json corners = Json::array();
+  for (const auto& corner : quad.corners) {
+    corners.push_back(Json::array({corner[0], corner[1], corner[2]}));
+  }
+  entry["corners"] = corners;
+  Json uvs = Json::array();
+  for (const auto& uv : quad.uv) {
+    uvs.push_back(Json::array({uv[0], uv[1]}));
+  }
+  entry["uv"] = uvs;
+  entry["normal"] = Json::array({quad.normal[0], quad.normal[1], quad.normal[2]});
+  if (quad.cull_face >= 0 && quad.cull_face < kFaceCount) {
+    entry["cull"] = kFaceNames[static_cast<int>(quad.cull_face)];
+  }
+  if (const char* kind = tint_kind_name(quad.tint)) entry["tint"] = kind;
+  return entry;
+}
+
+/* Resolve one model into the render data written to blocks.json. Full cubes
+ * keep the compact per-face form; anything else becomes explicit quads. */
+Visual make_visual(const ResolvedModel& model, const std::string& name) {
+  Visual visual;
+  if (!model.valid) return visual;
+  if (model.full_cube) {
+    visual.full_block = true;
+    visual.render_class = is_transparent_cube(name) ? "transparent" : "opaque";
+    for (int i = 0; i < kFaceCount; ++i) {
+      visual.sprites[kFaceNames[i]] =
+          model.face_sprites[i].empty() ? Json(nullptr) : Json(model.face_sprites[i]);
+      visual.tints[kFaceNames[i]] = model.face_tints[i];
+      if (const char* kind = tint_kind_name(model.face_tint_kinds[i])) {
+        visual.tint_kinds[kFaceNames[i]] = kind;
+      }
+    }
+  } else if (model.has_geometry) {
+    visual.full_block = false;
+    // Geometry writes depth; the UE/Preview opaque material is alpha-masked,
+    // so leaves, plants and thin blocks share the opaque pass.
+    visual.render_class = "opaque";
+    for (const ResolvedQuad& quad : model.geometry) {
+      if (quad.sprite.empty()) continue;
+      visual.geometry.push_back(quad_to_json(quad));
+    }
+  }
+  visual.signature = dump(visual.sprites) + dump(visual.tints) +
+                     dump(visual.tint_kinds) + dump(visual.geometry) +
+                     visual.render_class;
+  return visual;
+}
+
+Json visual_to_json(const Visual& visual, bool liquid) {
+  Json entry;
+  entry["full_block"] = visual.full_block;
+  entry["collision"] = visual.full_block && !liquid;
+  entry["render_class"] = visual.render_class;
+  entry["sprites"] = visual.sprites;
+  entry["tints"] = visual.tints;
+  entry["tint_kinds"] = visual.tint_kinds;
+  if (!visual.geometry.empty()) entry["geometry"] = visual.geometry;
+  return entry;
+}
+
 int next_power_of_two(int value) {
   int out = 16;
   while (out < value) out <<= 1;
@@ -295,16 +538,18 @@ int next_power_of_two(int value) {
 bool write_generated(const std::filesystem::path& out_dir, const std::string& profile,
                      const std::filesystem::path& profile_dir, const InputManifest& inputs,
                      const std::vector<ExtractedBlock>& blocks, size_t sprite_count,
+                     int atlas_width, int atlas_height, const std::string& atlas_sha256,
                      const std::vector<std::string>& block_errors,
                      const std::vector<std::string>& missing_textures,
                      const std::vector<std::string>& model_warnings) {
   std::string error;
 
-  // ---- blocks.json ------------------------------------------------------
+  // ---- blocks.json (schema v2) ------------------------------------------
   Json blocks_json;
-  blocks_json["format"] = 1;
+  blocks_json["schema"] = "reim.blocks";
+  blocks_json["format"] = 2;
   blocks_json["profile"] = profile;
-  blocks_json["abi_version"] = 1;
+  blocks_json["abi_version"] = REIM_ABI_VERSION;
   blocks_json["source"] = "client.jar:assets/minecraft/blockstates + models + textures";
   int full_blocks = 0;
   int renderable = 0;
@@ -317,10 +562,22 @@ bool write_generated(const std::filesystem::path& out_dir, const std::string& pr
     entry["collision"] = block.collision;
     entry["liquid"] = block.liquid;
     entry["render_class"] = block.render_class;
+    entry["material_class"] = block.render_class == "opaque"     ? "opaque"
+                              : block.render_class == "transparent" ? "transparent"
+                                                                   : "skip";
     entry["lifecycle"] = block.lifecycle;
     entry["properties"] = block.properties;
     entry["sprites"] = block.sprites;
     entry["tints"] = block.tints;
+    if (!block.tint_kinds.empty()) entry["tint_kinds"] = block.tint_kinds;
+    if (!block.geometry.empty()) entry["geometry"] = block.geometry;
+    if (!block.variants.empty()) {
+      Json variants = Json::object();
+      for (const auto& [state_key, visual] : block.variants) {
+        variants[state_key] = visual;
+      }
+      entry["variants"] = variants;
+    }
     entry["model"] = block.model.empty() ? Json(nullptr) : Json(block.model);
     entry["variant_count"] = block.variant_count;
     entry["representative_variant"] = block.representative_variant;
@@ -341,15 +598,16 @@ bool write_generated(const std::filesystem::path& out_dir, const std::string& pr
     return false;
   }
 
-  // ---- extraction report ------------------------------------------------
+  // ---- extraction report (schema v2) ------------------------------------
   Json report;
-  report["format"] = 1;
+  report["schema"] = "reim.extraction_report";
+  report["format"] = 2;
   report["profile"] = profile;
   report["source"] = "client.jar:assets/minecraft/blockstates + models + textures";
   const auto reports_dir = profile_dir / "reports";
   const bool reports_available = file::is_directory(reports_dir);
   report["reports"] = Json{{"available", reports_available},
-                           {"path", file::to_utf8(reports_dir)},
+                           {"path", "reports"},
                            {"reason", reports_available
                                           ? "existing reports directory found"
                                           : "no reports directory in the profile input; "
@@ -376,29 +634,47 @@ bool write_generated(const std::filesystem::path& out_dir, const std::string& pr
     return false;
   }
 
-  // ---- manifest ---------------------------------------------------------
+  // ---- manifest (schema v2) ---------------------------------------------
+  // Absolute input paths live only in debug_inputs.json (local diagnostics),
+  // never in manifest.json, so the manifest hash is machine independent.
   Json manifest;
-  manifest["format"] = 1;
+  manifest["schema"] = "reim.generated.manifest";
+  manifest["format"] = 2;
   manifest["profile"] = profile;
-  manifest["abi_version"] = 1;
+  manifest["abi_version"] = REIM_ABI_VERSION;
   manifest["tool"] = "reim-convert";
-  manifest["tool_version"] = "1.0.0-m1";
+  manifest["tool_version"] = "1.0.0-m2";
+  manifest["capabilities"] = Json::array(
+      {"frame_blob", "interpolation", "atlas_asset", "r0"});
   manifest["inputs"] = Json{
-      {"client_jar", file::to_utf8(inputs.client_jar)},
       {"client_jar_sha256", inputs.client_jar_sha256},
-      {"version_json", file::to_utf8(inputs.version_json)},
+      {"client_jar_size", inputs.client_jar_size},
       {"version_json_sha256", inputs.version_json_sha256},
-      {"asset_index", file::to_utf8(inputs.asset_index)},
-      {"asset_index_sha256", inputs.asset_index_sha256}};
+      {"version_json_size", inputs.version_json_size},
+      {"asset_index_sha256", inputs.asset_index_sha256},
+      {"asset_index_size", inputs.asset_index_size}};
   manifest["counts"] = Json{{"blocks_total", blocks.size()},
                             {"blocks_full", full_blocks},
                             {"blocks_renderable", renderable},
                             {"sprites", sprite_count},
                             {"missing_textures", missing_textures.size()}};
+  manifest["atlas"] = Json{{"file", "atlas.png"},
+                           {"width", atlas_width},
+                           {"height", atlas_height},
+                           {"tile_size", kTileSize},
+                           {"padding", 0},
+                           {"sampling", "nearest"},
+                           {"format", "rgba8"},
+                           {"mipmaps", false},
+                           {"sha256", atlas_sha256},
+                           {"meta_version", 2}};
+  manifest["biomes"] = Json{{"file", "biome_tints.json"},
+                            {"meta_version", 2},
+                            {"tint_kinds", Json::array({"grass", "foliage", "water"})}};
 
   Json generated = Json::array();
   for (const char* name : {"atlas.png", "blocks.json", "textures.json",
-                           "extraction_report.json"}) {
+                           "biome_tints.json", "extraction_report.json"}) {
     const auto path = out_dir / name;
     file::Bytes bytes;
     if (!file::read_all(path, bytes, error)) {
@@ -414,6 +690,18 @@ bool write_generated(const std::filesystem::path& out_dir, const std::string& pr
   manifest["generated"] = generated;
   const auto manifest_path = out_dir / "manifest.json";
   if (!write_json_file(manifest_path, manifest, error)) {
+    log_error(error);
+    return false;
+  }
+
+  Json debug_inputs;
+  debug_inputs["note"] =
+      "Local diagnostics only. Never part of manifest.json or any NativeVersion.";
+  debug_inputs["client_jar"] = file::to_utf8(inputs.client_jar);
+  debug_inputs["version_json"] = file::to_utf8(inputs.version_json);
+  debug_inputs["asset_index"] = file::to_utf8(inputs.asset_index);
+  debug_inputs["minecraft_dir"] = file::to_utf8(inputs.minecraft_dir);
+  if (!write_json_file(out_dir / "debug_inputs.json", debug_inputs, error)) {
     log_error(error);
     return false;
   }
@@ -460,6 +748,7 @@ int run_extract(const Args& args, const std::filesystem::path& exe_dir) {
       log_error(error);
       return 4;
     }
+    inputs.client_jar_size = bytes.size();
     inputs.client_jar_sha256 = hash::hex(hash::sha256(bytes.data(), bytes.size()));
   } else {
     if (!load_input_manifest(profile_dir, inputs, error)) {
@@ -532,9 +821,8 @@ int run_extract(const Args& args, const std::filesystem::path& exe_dir) {
       }
     }
 
-    block.full_block = model.full_cube;
     block.liquid = is_liquid(block.name);
-    block.collision = model.full_cube && !block.liquid;
+    const Visual base_visual = make_visual(model, block.name);
     if (is_air(block.name)) {
       block.lifecycle = "air";
       block.render_class = "skip";
@@ -546,23 +834,45 @@ int run_extract(const Args& args, const std::filesystem::path& exe_dir) {
               ? "block/water_still"
               : "block/lava_still";
       block.full_block = true;
+      block.collision = false;
       block.lifecycle = "fluid";
       block.render_class = block.name == "minecraft:water" ? "transparent" : "opaque";
       for (int i = 0; i < kFaceCount; ++i) {
         block.sprites[kFaceNames[i]] = fluid_sprite;
         block.tints[kFaceNames[i]] = 0xFFFFFFFFu;
+        const TintKind kind = block.name == "minecraft:water" ? TintKind::water
+                                                              : TintKind::none;
+        if (const char* kind_name = tint_kind_name(kind)) {
+          block.tint_kinds[kFaceNames[i]] = kind_name;
+        }
       }
-    } else if (model.full_cube) {
-      block.lifecycle = "cube";
-      block.render_class = is_transparent_cube(block.name) ? "transparent" : "opaque";
-      for (int i = 0; i < kFaceCount; ++i) {
-        block.sprites[kFaceNames[i]] =
-            model.face_sprites[i].empty() ? Json(nullptr) : Json(model.face_sprites[i]);
-        block.tints[kFaceNames[i]] = model.face_tints[i];
-      }
+    } else if (base_visual.render_class != "skip") {
+      block.lifecycle = model.full_cube ? "cube" : "non_cube";
+      block.full_block = base_visual.full_block;
+      block.collision = base_visual.full_block && !block.liquid;
+      block.render_class = base_visual.render_class;
+      block.sprites = base_visual.sprites;
+      block.tints = base_visual.tints;
+      block.tint_kinds = base_visual.tint_kinds;
+      block.geometry = base_visual.geometry;
     } else {
       block.lifecycle = "non_cube";
       block.render_class = "skip";
+    }
+
+    // State variants: at least grass_block[snowy=true] and snow layers, but
+    // any blockstate whose models differ visually gets its own entry.
+    if (!is_air(block.name) && !block.liquid && block.variant_count <= 16) {
+      for (const auto& [state_key, variant_model] : state_info.variant_models) {
+        if (state_key.empty()) continue;
+        ResolvedModel variant;
+        std::string variant_error;
+        if (!resolver.resolve(variant_model, variant, variant_error)) continue;
+        const Visual visual = make_visual(variant, block.name);
+        if (visual.signature == base_visual.signature) continue;
+        if (visual.render_class == "skip") continue;
+        block.variants[state_key] = visual_to_json(visual, block.liquid);
+      }
     }
     blocks.push_back(std::move(block));
   }
@@ -574,11 +884,36 @@ int run_extract(const Args& args, const std::filesystem::path& exe_dir) {
   // Texture atlas: collect renderable sprites, pack and blit real client.jar
   // PNGs. Missing textures get a marked magenta checker and a report entry.
   std::set<std::string> sprite_set;
+  auto add_face_sprites = [&](const Json& sprites) {
+    if (!sprites.is_object()) return;
+    for (auto it = sprites.begin(); it != sprites.end(); ++it) {
+      if (it.value().is_string()) sprite_set.insert(it.value().get<std::string>());
+    }
+  };
+  auto add_geometry_sprites = [&](const Json& geometry) {
+    if (!geometry.is_array()) return;
+    for (const Json& quad : geometry) {
+      if (!quad.is_object()) continue;
+      const auto sprite = quad.find("sprite");
+      if (sprite != quad.end() && sprite->is_string()) {
+        sprite_set.insert(sprite->get<std::string>());
+      }
+    }
+  };
   for (const ExtractedBlock& block : blocks) {
     if (!block.renderable()) continue;
     for (int i = 0; i < kFaceCount; ++i) {
       const std::string sprite = sprite_value(block, i);
       if (!sprite.empty()) sprite_set.insert(sprite);
+    }
+    add_geometry_sprites(block.geometry);
+    for (const auto& [state_key, variant] : block.variants) {
+      (void)state_key;
+      if (!variant.is_object()) continue;
+      const auto sprites = variant.find("sprites");
+      if (sprites != variant.end()) add_face_sprites(*sprites);
+      const auto geometry = variant.find("geometry");
+      if (geometry != variant.end()) add_geometry_sprites(*geometry);
     }
   }
   std::vector<std::string> sprites(sprite_set.begin(), sprite_set.end());
@@ -612,16 +947,30 @@ int run_extract(const Args& args, const std::filesystem::path& exe_dir) {
     log_error(error);
     return 7;
   }
+  file::Bytes atlas_bytes;
+  if (!file::read_all(out_dir / "atlas.png", atlas_bytes, error)) {
+    log_error(error);
+    return 7;
+  }
+  const std::string atlas_sha256 =
+      hash::hex(hash::sha256(atlas_bytes.data(), atlas_bytes.size()));
 
   // textures.json is written here (instead of write_generated) so the atlas
   // height and sprite order are final and deterministic.
   Json textures_json;
-  textures_json["format"] = 1;
+  textures_json["schema"] = "reim.textures";
+  textures_json["format"] = 2;
   textures_json["profile"] = profile;
+  textures_json["abi_version"] = REIM_ABI_VERSION;
   textures_json["atlas"] = Json{{"file", "atlas.png"},
                                 {"width", kAtlasWidth},
                                 {"height", atlas_height},
-                                {"tile_size", kTileSize}};
+                                {"tile_size", kTileSize},
+                                {"padding", 0},
+                                {"sampling", "nearest"},
+                                {"format", "rgba8"},
+                                {"mipmaps", false},
+                                {"sha256", atlas_sha256}};
   Json sprite_map = Json::object();
   for (size_t i = 0; i < sprites.size(); ++i) {
     const int index = static_cast<int>(i);
@@ -629,6 +978,8 @@ int run_extract(const Args& args, const std::filesystem::path& exe_dir) {
     const int y = (index / per_row) * kTileSize;
     Json entry;
     entry["index"] = index;
+    entry["tile_x"] = index % per_row;
+    entry["tile_y"] = index / per_row;
     entry["x"] = x;
     entry["y"] = y;
     entry["u0"] = static_cast<double>(x) / kAtlasWidth;
@@ -644,8 +995,15 @@ int run_extract(const Args& args, const std::filesystem::path& exe_dir) {
     return 8;
   }
 
+  const Json biome_tints = collect_biome_tints(archive, profile, model_warnings);
+  if (!write_json_file(out_dir / "biome_tints.json", biome_tints, error)) {
+    log_error(error);
+    return 10;
+  }
+
   if (!write_generated(out_dir, profile, profile_dir, inputs, blocks, sprites.size(),
-                       block_errors, missing_textures, model_warnings)) {
+                       kAtlasWidth, atlas_height, atlas_sha256, block_errors,
+                       missing_textures, model_warnings)) {
     return 9;
   }
 

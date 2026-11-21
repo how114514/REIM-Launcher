@@ -21,6 +21,9 @@ struct InputManifest {
   std::string client_jar_sha256;
   std::string version_json_sha256;
   std::string asset_index_sha256;
+  uint64_t client_jar_size = 0;
+  uint64_t version_json_size = 0;
+  uint64_t asset_index_size = 0;
 };
 
 bool load_input_manifest(const std::filesystem::path& profile_dir, InputManifest& out,

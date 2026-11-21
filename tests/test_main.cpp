@@ -41,12 +41,23 @@ std::string write_manifest_case(const std::filesystem::path& dir) {
                                        {"sha256", reim::hash::hex(digest)}});
   }
   nlohmann::json manifest;
-  manifest["format"] = 1;
+  manifest["schema"] = "reim.generated.manifest";
+  manifest["format"] = 2;
   manifest["profile"] = "26.3";
-  manifest["abi_version"] = 1;
+  manifest["abi_version"] = REIM_ABI_VERSION;
   manifest["tool"] = "m1-tests";
   manifest["tool_version"] = "1";
+  manifest["capabilities"] = nlohmann::json::array(
+      {"frame_blob", "interpolation", "atlas_asset", "r0"});
   manifest["counts"] = nlohmann::json{{"blocks_total", 0}, {"sprites", 0}};
+  manifest["atlas"] = nlohmann::json{{"file", "atlas.png"},
+                                     {"width", 16},
+                                     {"height", 16},
+                                     {"tile_size", 16},
+                                     {"meta_version", 2},
+                                     {"sha256", reim::hash::hex(
+                                                    reim::hash::sha256(
+                                                        "not-a-real-png-for-manifest-test\n"))}};
   manifest["generated"] = generated;
   std::string error;
   REQUIRE(reim::file::write_text(dir / "manifest.json", manifest.dump(2), error));
@@ -56,8 +67,8 @@ std::string write_manifest_case(const std::filesystem::path& dir) {
 
 } // namespace
 
-TEST_CASE("ABI v1 layout is stable") {
-  REQUIRE(REIM_ABI_VERSION == 1u);
+TEST_CASE("ABI v2 layout is stable") {
+  REQUIRE(REIM_ABI_VERSION == 2u);
   REQUIRE(sizeof(ReimVertex) == REIM_VERTEX_STRIDE);
   REQUIRE(offsetof(ReimVertex, position) == 0);
   REQUIRE(offsetof(ReimVertex, normal) == 12);
@@ -65,6 +76,15 @@ TEST_CASE("ABI v1 layout is stable") {
   REQUIRE(offsetof(ReimVertex, light) == 32);
   REQUIRE(offsetof(ReimVertex, sprite) == 34);
   REQUIRE(offsetof(ReimVertex, tint) == 36);
+
+  /* v2 frame ownership fields are inside the required minimum size. */
+  REQUIRE(REIM_RENDER_FRAME_MIN_SIZE >=
+          offsetof(ReimRenderFrame, owned_bytes) + sizeof(uint64_t));
+  REQUIRE(REIM_MAX_PENDING_FRAMES == 4u);
+  REQUIRE(REIM_MAX_FRAME_UPDATES == 4096u);
+  REQUIRE(REIM_MAX_FRAME_BYTES == 64ull * 1024ull * 1024ull);
+  REQUIRE(REIM_INSTANCE_CONFIG_MIN_SIZE >=
+          offsetof(ReimInstanceConfig, spawn_pitch) + sizeof(float));
 }
 
 TEST_CASE("DLL exports reim_get_api with the expected ABI") {
@@ -74,6 +94,9 @@ TEST_CASE("DLL exports reim_get_api with the expected ABI") {
   REQUIRE(api->struct_size == sizeof(ReimRuntimeApi));
   REQUIRE(api->create != nullptr);
   REQUIRE(api->fetch_frame != nullptr);
+  REQUIRE(api->release_frame != nullptr);
+  REQUIRE(api->get_runtime_info != nullptr);
+  REQUIRE(api->get_asset != nullptr);
   REQUIRE(reim_get_api(REIM_ABI_VERSION + 1) == nullptr);
 }
 
@@ -128,19 +151,36 @@ TEST_CASE("generated manifest accepts matching input and rejects mismatches") {
 
   reim::data::GeneratedManifest manifest;
   std::string error;
-  REQUIRE(reim::data::validate_generated(dir, "26.3", 1, manifest, error));
+  REQUIRE(reim::data::validate_generated(dir, "26.3", REIM_ABI_VERSION, manifest, error));
   REQUIRE(manifest.profile == "26.3");
+  REQUIRE(manifest.format == 2);
   REQUIRE(manifest.files.size() == 3);
+  REQUIRE(manifest.atlas_meta_version == 2);
 
-  REQUIRE_FALSE(reim::data::validate_generated(dir, "26.2", 1, manifest, error));
+  /* ABI 2 rejects pre-v2 generated data instead of guessing. */
+  nlohmann::json old_manifest = nlohmann::json::parse(write_manifest_case(dir));
+  old_manifest["format"] = 1;
+  std::string ignored;
+  REQUIRE(reim::file::write_text(dir / "manifest.json", old_manifest.dump(2), ignored));
+  REQUIRE_FALSE(
+      reim::data::validate_generated(dir, "26.3", REIM_ABI_VERSION, manifest, error));
+  REQUIRE(error.find("format 1") != std::string::npos);
+  REQUIRE(reim::file::write_text(dir / "manifest.json",
+                                 nlohmann::json::parse(write_manifest_case(dir)).dump(2),
+                                 ignored));
+
+  REQUIRE_FALSE(
+      reim::data::validate_generated(dir, "26.2", REIM_ABI_VERSION, manifest, error));
   REQUIRE(error.find("profile mismatch") != std::string::npos);
 
-  REQUIRE_FALSE(reim::data::validate_generated(dir, "26.3", 2, manifest, error));
+  REQUIRE_FALSE(
+      reim::data::validate_generated(dir, "26.3", REIM_ABI_VERSION + 1, manifest, error));
   REQUIRE(error.find("ABI mismatch") != std::string::npos);
 
   std::string write_error;
   REQUIRE(reim::file::write_text(dir / "blocks.json", "tampered", write_error));
-  REQUIRE_FALSE(reim::data::validate_generated(dir, "26.3", 1, manifest, error));
+  REQUIRE_FALSE(
+      reim::data::validate_generated(dir, "26.3", REIM_ABI_VERSION, manifest, error));
   REQUIRE((error.find("size mismatch") != std::string::npos ||
            error.find("sha256 mismatch") != std::string::npos));
 

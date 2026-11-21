@@ -88,6 +88,7 @@ R0 **不是**原版 Java 渲染逻辑/OpenGL 绘制命令回放。
 | [docs/ROADMAP.md](docs/ROADMAP.md) | 四阶段路线（M1 C++ Gameplay Preview → UE Native Rendering → 完整游戏 + Converter → Launcher 产品化；Converter 自 M1 启动）、并行轨道、门禁、风险 |
 | [docs/M1_PLAN.md](docs/M1_PLAN.md) | M1 执行计划：工作包、C ABI/快照、Converter 产物、验收与新对话交接规则 |
 | [docs/M2_PLAN.md](docs/M2_PLAN.md) | M2 执行计划：UE Host/Bridge、Rendering Contract v2、R0 渲染、Converter UE Adapter 集成/NativeBuild、Shipping 干净机验收与交接规则 |
+| [docs/M2_ACCEPTANCE.md](docs/M2_ACCEPTANCE.md) | M2 实测记录（S1 A/B/C、S2 D/E/G1、S3 Shipping/回归/验收；干净机与用户确认未执行，单独标注） |
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | 开发环境、仓库布局、构建边界、编码/ABI 规则、测试与发布 |
 | [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) | MC 版本/协议/存档/资源包/Mod/UE 运行环境兼容矩阵 |
 | [docs/ARCHITECTURE.md#附录-e26-3-静态实测2026-11-18](docs/ARCHITECTURE.md#附录-e26-3-静态实测2026-11-18) | 26.3 client.jar + 45 个库的静态普查数据 |
@@ -97,7 +98,8 @@ R0 **不是**原版 Java 渲染逻辑/OpenGL 绘制命令回放。
 - 本文档是**架构基线**，不是已实现产品。
 - 主版本基线：Minecraft Java Edition **26.3**（协议 777 / DataVersion 5023 / 资源包 97.1 / 数据包 121.0 / Java 25）。
 - UE 基线：**5.8.4**（开发/CI）；用户侧不安装。
-- 已对 26.3 做静态字节码普查（11,383 个类 + 45 个依赖库）。M1（C++ Native Gameplay Preview）已完成并通过用户验收：真实 26.3 存档加载、固定 20 TPS Runtime、OpenGL 预览与自动验收脚本；验收记录、豁免项与已知限制见 [docs/M1_ACCEPTANCE.md](docs/M1_ACCEPTANCE.md)，下一步按 [docs/ROADMAP.md](docs/ROADMAP.md) 进入 M2，执行拆分见 [docs/M2_PLAN.md](docs/M2_PLAN.md)。
+- 已对 26.3 做静态字节码普查（11,383 个类 + 45 个依赖库）。M1（C++ Native Gameplay Preview）已完成并通过用户验收：真实 26.3 存档加载、固定 20 TPS Runtime、OpenGL 预览与自动验收脚本；验收记录、豁免项与已知限制见 [docs/M1_ACCEPTANCE.md](docs/M1_ACCEPTANCE.md)。
+- M2 的 S1–S3 已实施：UE 5.8.4 Host/Bridge、Rendering Contract v2、R0 UE 渲染、Converter NativeVersion/NativeBuild、Shipping 打包与回归脚本。实测见 [docs/M2_ACCEPTANCE.md](docs/M2_ACCEPTANCE.md)：Shipping 60 秒 run 20 TPS、E9/错误矩阵/自动化通过；**干净机验收（F5）与用户画面确认（H6）尚未执行**，M2 整体因此未宣布完成。计划与交接见 [docs/M2_PLAN.md](docs/M2_PLAN.md)。
 
 ## 法律与资产
 

@@ -27,6 +27,32 @@
 
 namespace {
 
+void* REIM_CALL test_alloc(size_t size, size_t align) {
+  if (align < alignof(std::max_align_t)) align = alignof(std::max_align_t);
+#if defined(_MSC_VER)
+  return _aligned_malloc(size, align);
+#else
+  return std::aligned_alloc(align, (size + align - 1) & ~(align - 1));
+#endif
+}
+
+void REIM_CALL test_free(void* ptr) {
+#if defined(_MSC_VER)
+  _aligned_free(ptr);
+#else
+  std::free(ptr);
+#endif
+}
+
+/* Fetches and immediately returns the host-owned blob; the integration test
+ * only inspects scalar frame fields. */
+int32_t fetch_and_release(const ReimRuntimeApi* api, ReimInstance* instance,
+                          ReimRenderFrame* frame) {
+  const int32_t result = api->fetch_frame(instance, frame);
+  if (result == REIM_OK) api->release_frame(instance, frame->frame_id);
+  return result;
+}
+
 std::filesystem::path generated_dir() {
   const char* env = std::getenv("REIM_TEST_GENERATED");
   if (env != nullptr && *env != '\0') return std::filesystem::path(env);
@@ -141,6 +167,81 @@ TEST_CASE("S3 block table loads the Converter output") {
   CHECK(water.render_class == reim::data::RenderClass::transparent);
 
   CHECK(table.def(0).render_class == reim::data::RenderClass::skip);
+}
+
+TEST_CASE("S4 block table resolves state variants and non-cube geometry") {
+  reim::data::BlockTable table;
+  std::string error;
+  if (!load_real_table(table, error)) {
+    WARN(error << "; skipping variant test");
+    return;
+  }
+
+  // grass_block[snowy=true] -> grass_block_snow model.
+  std::map<std::string, std::string, std::less<>> snowy;
+  snowy["snowy"] = "true";
+  const uint32_t snowy_id = table.find_state("minecraft:grass_block", snowy);
+  REQUIRE(snowy_id != 0);
+  CHECK(snowy_id != table.find("minecraft:grass_block"));
+  const reim::data::BlockDef& snowy_grass = table.def(snowy_id);
+  CHECK(snowy_grass.full_block);
+  CHECK(snowy_grass.render_class == reim::data::RenderClass::opaque);
+
+  std::map<std::string, std::string, std::less<>> plain;
+  plain["snowy"] = "false";
+  CHECK(table.find_state("minecraft:grass_block", plain) ==
+        table.find("minecraft:grass_block"));
+
+  // Thin snow layer carries explicit box geometry instead of a cube.
+  std::map<std::string, std::string, std::less<>> one_layer;
+  one_layer["layers"] = "1";
+  const uint32_t snow_id = table.find_state("minecraft:snow", one_layer);
+  REQUIRE(snow_id != 0);
+  const reim::data::BlockDef& snow = table.def(snow_id);
+  CHECK(!snow.full_block);
+  CHECK(!snow.geometry.empty());
+  CHECK(snow.render_class == reim::data::RenderClass::opaque);
+
+  std::map<std::string, std::string, std::less<>> eight_layers;
+  eight_layers["layers"] = "8";
+  CHECK(table.def(table.find_state("minecraft:snow", eight_layers)).full_block);
+
+  // Cross plants are cutout geometry, not full cubes.
+  const reim::data::BlockDef& grass =
+      table.def(table.find("minecraft:short_grass"));
+  CHECK(!grass.full_block);
+  CHECK(grass.render_class == reim::data::RenderClass::opaque);
+  CHECK(grass.geometry.size() == 4);
+
+  // Grass/foliage faces resolve their tint from the biome table.
+  uint32_t color = 0;
+  CHECK(table.biome_color("minecraft:snowy_plains", reim::data::TintKind::grass,
+                          color));
+  CHECK(color == 0xFF97B480u); // 0x80B497 as RGBA8 (red in the low byte)
+}
+
+TEST_CASE("S4 snow layer meshes as a thin box, not a cube") {
+  reim::data::BlockTable table;
+  std::string error;
+  if (!load_real_table(table, error)) {
+    WARN(error << "; skipping snow mesh test");
+    return;
+  }
+  reim::core::LoadedChunk chunk = make_flat_chunk(table, "minecraft:snow", 0);
+  // The palette entry needs the layer property to resolve to the thin model.
+  chunk.chunk.sections[0].palette[1].properties["layers"] = "1";
+  chunk.build(table);
+
+  std::vector<reim::mesh::SectionMeshOutput> out;
+  reim::mesh::mesh_chunk(0, 0, chunk.chunk, chunk.section_block_ids, table,
+                         &query_loaded_chunk, &chunk, out);
+  REQUIRE(out.size() == 1);
+  CHECK(out[0].opaque_indices.size() == 36); // six faces of the box
+  float max_y = 0.0f;
+  for (const ReimVertex& vertex : out[0].opaque_vertices) {
+    max_y = std::max(max_y, vertex.position[1]);
+  }
+  CHECK(max_y < 0.2f); // 2/16 block high
 }
 
 TEST_CASE("S3 section mesh emits six outward faces for one block") {
@@ -346,6 +447,8 @@ TEST_CASE("S3 runtime ABI loads the real world, ticks and applies input") {
   ReimHostApi host{};
   host.struct_size = sizeof(host);
   host.abi_version = REIM_ABI_VERSION;
+  host.alloc = &test_alloc;
+  host.free = &test_free;
   host.log = +[](int32_t, const char*, const char*) {};
 
   const std::wstring world_path = std::filesystem::path(world_env).wstring();
@@ -374,7 +477,7 @@ TEST_CASE("S3 runtime ABI loads the real world, ticks and applies input") {
     frame = ReimRenderFrame{};
     frame.struct_size = sizeof(frame);
     frame.abi_version = REIM_ABI_VERSION;
-    REQUIRE(api->fetch_frame(instance, &frame) == REIM_OK);
+    REQUIRE(fetch_and_release(api, instance, &frame) == REIM_OK);
     updates_seen += frame.update_count;
     if (frame.ready && frame.tick >= 40) {
       ready = true;
@@ -410,7 +513,7 @@ TEST_CASE("S3 runtime ABI loads the real world, ticks and applies input") {
     frame = ReimRenderFrame{};
     frame.struct_size = sizeof(frame);
     frame.abi_version = REIM_ABI_VERSION;
-    REQUIRE(api->fetch_frame(instance, &frame) == REIM_OK);
+    REQUIRE(fetch_and_release(api, instance, &frame) == REIM_OK);
     std::this_thread::sleep_for(std::chrono::milliseconds(5));
   }
   CHECK(frame.tick >= start_tick + 20);
@@ -427,7 +530,7 @@ TEST_CASE("S3 runtime ABI loads the real world, ticks and applies input") {
     frame = ReimRenderFrame{};
     frame.struct_size = sizeof(frame);
     frame.abi_version = REIM_ABI_VERSION;
-    REQUIRE(api->fetch_frame(instance, &frame) == REIM_OK);
+    REQUIRE(fetch_and_release(api, instance, &frame) == REIM_OK);
     std::this_thread::sleep_for(std::chrono::milliseconds(5));
   }
   CHECK(frame.tick >= walk_tick + 140);
@@ -452,12 +555,12 @@ TEST_CASE("S3 runtime ABI loads the real world, ticks and applies input") {
   std::this_thread::sleep_for(std::chrono::milliseconds(100));
   frame = ReimRenderFrame{};
   frame.struct_size = sizeof(frame);
-  REQUIRE(api->fetch_frame(instance, &frame) == REIM_OK);
+  REQUIRE(fetch_and_release(api, instance, &frame) == REIM_OK);
   const uint64_t paused_tick = frame.tick;
   std::this_thread::sleep_for(std::chrono::milliseconds(300));
   frame = ReimRenderFrame{};
   frame.struct_size = sizeof(frame);
-  REQUIRE(api->fetch_frame(instance, &frame) == REIM_OK);
+  REQUIRE(fetch_and_release(api, instance, &frame) == REIM_OK);
   CHECK(frame.tick <= paused_tick + 1);
   api->set_simulation_paused(instance, 0);
 

@@ -27,3 +27,18 @@ inspect-world-rerun.json
 
 # Mojang metadata downloaded during setup; never commit Mojang files (M1-D06)
 version_manifest_v2.json
+
+# UE project transients (M2-A7); Content/*.uasset|*.umap are committed via LFS
+runtime/host/Binaries/
+runtime/host/Intermediate/
+runtime/host/Saved/
+runtime/host/DerivedDataCache/
+runtime/host/Build/
+runtime/host/Plugins/*/Binaries/
+runtime/host/Plugins/*/Intermediate/
+runtime/host/Plugins/*/Saved/
+runtime/host/*.sln
+runtime/host/*.suo
+runtime/host/*.opensdf
+runtime/host/*.sdf
+runtime/host/*.VC.db

@@ -27,6 +27,28 @@
         "CMAKE_CONFIGURATION_TYPES": "Debug;Release",
         "REIM_BUILD_TESTS": "ON"
       }
+    },
+    {
+      "name": "m2-debug",
+      "displayName": "M2 Debug (MSVC x64, ABI v2)",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/build/m2",
+      "cacheVariables": {
+        "CMAKE_CONFIGURATION_TYPES": "Debug;Release",
+        "REIM_BUILD_TESTS": "ON"
+      }
+    },
+    {
+      "name": "m2-release",
+      "displayName": "M2 Release (MSVC x64, ABI v2)",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/build/m2",
+      "cacheVariables": {
+        "CMAKE_CONFIGURATION_TYPES": "Debug;Release",
+        "REIM_BUILD_TESTS": "ON"
+      }
     }
   ],
   "buildPresets": [
@@ -38,6 +60,16 @@
     {
       "name": "m1-release",
       "configurePreset": "m1-release",
+      "configuration": "Release"
+    },
+    {
+      "name": "m2-debug",
+      "configurePreset": "m2-debug",
+      "configuration": "Debug"
+    },
+    {
+      "name": "m2-release",
+      "configurePreset": "m2-release",
       "configuration": "Release"
     }
   ],
@@ -53,6 +85,22 @@
     {
       "name": "m1-release",
       "configurePreset": "m1-release",
+      "configuration": "Release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "m2-debug",
+      "configurePreset": "m2-debug",
+      "configuration": "Debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "m2-release",
+      "configurePreset": "m2-release",
       "configuration": "Release",
       "output": {
         "outputOnFailure": true
