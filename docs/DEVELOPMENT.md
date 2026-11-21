@@ -144,20 +144,31 @@ Minecraft Reimagined Launcher/
 
 ### 4.2 UE 打包（Shipping）
 
+日常使用脚本（S3 实测）：
+
 ```bat
-:: 路径按实际安装调整
-"C:\Program Files\Epic Games\UE_5.8\Engine\Build\BatchFiles\RunUAT.bat" ^
-  BuildCookRun ^
-  -project="C:\REIM\REIM.uproject" ^
-  -noP4 -platform=Win64 -clientconfig=Shipping ^
-  -cook -allmaps -build -stage -pak -archive ^
-  -archivedirectory="C:\Builds\REIM"
+powershell -ExecutionPolicy Bypass -File tools\m2-build.ps1 -Package -PackageConfig Shipping
 ```
 
-- 启用 IoStore 时按项目设置加 `-iostore`（产物 `.utoc`/`.ucas`）。
-- Project Settings → Packaging → Prerequisites：选择 app-local 或安装器。
-- Shipping 剥离控制台/统计/自动化；确保游戏内可退出/改设置。
-- 每次 Release 在**未安装 UE** 的干净机跑冒烟。
+脚本内部调用（路径按实际安装调整；`REIMRuntime` 是 UE Game target）：
+
+```bat
+"%UE_ROOT%\Engine\Build\BatchFiles\RunUAT.bat" ^
+  BuildCookRun ^
+  -project="D:\EngineeringDocuments\REIM-Launcher\runtime\host\REIM.uproject" ^
+  -target=REIMRuntime ^
+  -noP4 -platform=Win64 -clientconfig=Shipping ^
+  -build -cook -stage -pak -archive ^
+  -archivedirectory="D:\EngineeringDocuments\REIM-Launcher\build\m2\ue-shipping-package" ^
+  -applocaldirectory="D:\EngineeringDocuments\REIM-Launcher\build\m2\applocal" ^
+  -nodebuginfo -unattended
+```
+
+- UE 5.8 的 `IncludeAppLocalPrerequisites` 不再被 BuildCookRun 读取；脚本把 Engine 的 `AppLocalDependencies` 复制到无空格目录并显式传 `-applocaldirectory`。`-nodebuginfo` 排除 PDB。
+- DX12 targeted shader format 为 `PCD3D_SM6`（`DefaultEngine.ini` 替换 BaseEngine 的 SM5）；DX11 保留 SM5 冒烟。
+- Shipping 的 UE 引擎日志被编译掉（installed engine），诊断日志看实例目录的 `REIM-host.log`。
+- 最终组合由 `reim-convert assemble` 生成到 `build/native-build/26.3`；Development 版本在 `build/native-build-dev/26.3` 供自动化。
+- 每次 Release 在**未安装 UE** 的干净机跑冒烟（F5，尚未执行）。
 
 ### 4.3 游戏 DLL
 

@@ -63,6 +63,24 @@ int32_t REIM_CALL get_status_json(ReimInstance* instance, char* buffer,
                                                                        buffer_size);
 }
 
+void REIM_CALL release_frame(ReimInstance* instance, uint64_t frame_id) {
+  if (!instance) return;
+  reinterpret_cast<RuntimeInstance*>(instance)->release_frame(frame_id);
+}
+
+int32_t REIM_CALL get_runtime_info(ReimInstance* instance, ReimRuntimeInfo* out) {
+  if (!instance) return REIM_ERR_INVALID_ARGUMENT;
+  return reinterpret_cast<RuntimeInstance*>(instance)->get_runtime_info(out);
+}
+
+int32_t REIM_CALL get_asset(ReimInstance* instance, uint32_t kind,
+                            const void** out_data, uint64_t* out_size,
+                            uint64_t* out_revision) {
+  if (!instance) return REIM_ERR_INVALID_ARGUMENT;
+  return reinterpret_cast<RuntimeInstance*>(instance)->get_asset(
+      kind, out_data, out_size, out_revision);
+}
+
 const ReimRuntimeApi kApi = {
     sizeof(ReimRuntimeApi),
     REIM_ABI_VERSION,
@@ -74,6 +92,9 @@ const ReimRuntimeApi kApi = {
     &submit_input,
     &set_simulation_paused,
     &get_status_json,
+    &release_frame,
+    &get_runtime_info,
+    &get_asset,
 };
 
 } // namespace

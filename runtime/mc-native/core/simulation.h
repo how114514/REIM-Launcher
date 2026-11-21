@@ -75,6 +75,8 @@ struct SimulationConfig {
   double spawn_x = 0.0;
   double spawn_y = 0.0;
   double spawn_z = 0.0;
+  float spawn_yaw = 0.0f;
+  float spawn_pitch = 0.0f;
   float mouse_sensitivity = 0.15f;
   bool invert_y = false;
 };

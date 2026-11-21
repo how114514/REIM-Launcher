@@ -59,10 +59,27 @@ bool load_manifest(const std::filesystem::path& generated_dir, GeneratedManifest
   }
   out = GeneratedManifest{};
   out.format = static_cast<int>(get_u32(root, "format"));
+  out.schema = get_string(root, "schema");
   out.profile = get_string(root, "profile");
   out.abi_version = get_u32(root, "abi_version");
   out.tool = get_string(root, "tool");
   out.tool_version = get_string(root, "tool_version");
+
+  const Json* capabilities = find_member(root, "capabilities");
+  if (capabilities && capabilities->is_array()) {
+    for (const Json& item : *capabilities) {
+      if (item.is_string()) out.capabilities.push_back(item.get<std::string>());
+    }
+  }
+
+  const Json* atlas = find_member(root, "atlas");
+  if (atlas && atlas->is_object()) {
+    out.atlas_sha256 = get_string(*atlas, "sha256");
+    out.atlas_width = get_u32(*atlas, "width");
+    out.atlas_height = get_u32(*atlas, "height");
+    out.atlas_tile_size = get_u32(*atlas, "tile_size");
+    out.atlas_meta_version = get_u32(*atlas, "meta_version");
+  }
 
   const Json* counts = find_member(root, "counts");
   if (counts && counts->is_object()) {
@@ -126,6 +143,17 @@ bool validate_generated(const std::filesystem::path& generated_dir,
     return false;
   }
   if (!load_manifest(generated_dir, out, error)) return false;
+  if (out.format != 2) {
+    error = "generated manifest schema format " + std::to_string(out.format) +
+            " is not supported (ABI 2 requires format 2; re-run "
+            "`reim-convert extract`)";
+    return false;
+  }
+  if (out.atlas_sha256.empty() || out.atlas_meta_version != 2) {
+    error = "generated manifest is missing the v2 atlas descriptor; re-run "
+            "`reim-convert extract`";
+    return false;
+  }
   if (out.profile != expected_profile) {
     error = "profile mismatch: generated '" + out.profile + "', runtime expects '" +
             expected_profile + "'";

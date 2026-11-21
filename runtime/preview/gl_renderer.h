@@ -41,6 +41,10 @@ class Renderer {
   ~Renderer();
 
   bool initialize(const std::filesystem::path& generated_dir, std::string& error);
+  /* ABI v2 asset path: atlas PNG bytes delivered by get_asset. `source` is a
+   * diagnostic label used in the log line. */
+  bool initialize_from_png(const uint8_t* data, size_t size,
+                           const std::string& source, std::string& error);
   void shutdown();
 
   /* Applies the frame's update/remove lists. Call once per fetch_frame. */

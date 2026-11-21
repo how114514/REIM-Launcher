@@ -15,14 +15,21 @@ struct GeneratedFile {
 
 struct GeneratedManifest {
   int format = 0;
+  std::string schema;
   std::string profile;
   uint32_t abi_version = 0;
   std::string tool;
   std::string tool_version;
+  std::vector<std::string> capabilities;
   std::vector<GeneratedFile> files;
   uint64_t blocks_total = 0;
   uint64_t blocks_renderable = 0;
   uint64_t sprites = 0;
+  std::string atlas_sha256;
+  uint32_t atlas_width = 0;
+  uint32_t atlas_height = 0;
+  uint32_t atlas_tile_size = 0;
+  uint32_t atlas_meta_version = 0;
 };
 
 /* Loads <generated_dir>/manifest.json. */

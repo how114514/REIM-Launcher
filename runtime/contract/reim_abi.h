@@ -1,18 +1,32 @@
 /*
- * REIM Runtime <-> Host C ABI, version 1 (M1 minimal surface).
+ * REIM Runtime <-> Host C ABI, version 2 (M2).
  *
  * Scope
- *   This header is ONLY the boundary between a Runtime Host (REIMPreview.exe in
- *   M1, the UE Shipping runtime in M2+) and the version-specific native gameplay
+ *   This header is ONLY the boundary between a Runtime Host (REIMPreview.exe,
+ *   reim-headless.exe, the UE runtime) and the version-specific native gameplay
  *   DLL (mc_26.3.dll). It is not a Launcher/Converter protocol.
  *
  * Threading
  *   create/destroy/start/stop  : control thread, not concurrent with each other.
- *   fetch_frame                : Host render thread only.
+ *                                destroy() also frees any frame blobs the Host
+ *                                has not released yet.
+ *   fetch_frame                : Host game/render thread only; never concurrent.
+ *   release_frame              : any thread (GT or RT); must not block the
+ *                                simulation. Releasing an unknown or already
+ *                                released frame_id is a logged no-op.
  *   submit_input               : any thread; events are queued and applied on
  *                                the next 20 TPS simulation tick.
+ *   get_runtime_info/get_asset : any thread for the lifetime of the instance;
+ *                                returned memory is read-only and owned by the
+ *                                Runtime (valid until destroy).
  *   Simulation runs on a DLL-internal thread at a fixed 20 TPS and is never
  *   driven by the Host frame rate.
+ *
+ * Host callbacks
+ *   ReimHostApi::alloc/free are REQUIRED in v2 and must be thread safe. alloc
+ *   returns memory aligned to at least the requested alignment; free accepts
+ *   pointers produced by alloc. Neither may call back into the Runtime or throw.
+ *   The log callback is optional; its strings are valid only for the call.
  *
  * Units and coordinates
  *   1 unit = 1 block = 1 metre. Right-handed, +Y up, +X east, +Z south.
@@ -21,11 +35,12 @@
  *   Camera FOV is vertical, in degrees.
  *
  * Ownership / lifetime
- *   All pointers inside ReimRenderFrame and its arrays are owned by the Runtime
- *   and remain valid (read-only for the Host) until the next fetch_frame call.
- *   The Host must never free or retain them. Strings crossing this ABI are
- *   UTF-16 on Windows paths and UTF-8 for logs. No C++ objects, STL containers
- *   or C++ exceptions cross this boundary.
+ *   The Runtime copies each frame into a single host-owned blob obtained from
+ *   ReimHostApi::alloc (see reim_render.h). The Host releases it with
+ *   release_frame, which calls ReimHostApi::free. Up to
+ *   REIM_MAX_PENDING_FRAMES blobs may be outstanding. Strings crossing this ABI
+ *   are UTF-16 on Windows paths and UTF-8 for logs. No C++ objects, STL
+ *   containers or C++ exceptions cross this boundary.
  *
  * Errors
  *   All entry points report failure by return code and by the Host log callback.
@@ -40,7 +55,7 @@
 
 #include "reim_render.h"
 
-#define REIM_ABI_VERSION 1u
+#define REIM_ABI_VERSION 2u
 
 #if defined(_WIN32)
 #  if defined(REIM_BUILD_DLL)
@@ -69,8 +84,23 @@ typedef enum ReimResult {
   REIM_ERR_NO_WORLD = 7,
   REIM_ERR_NOT_STARTED = 8,
   REIM_ERR_ALREADY_STARTED = 9,
-  REIM_ERR_INTERNAL = 10
+  REIM_ERR_INTERNAL = 10,
+  /* v2: the Host has too many unreleased frame blobs. Nothing was allocated or
+   * consumed; retry after release_frame. Simulation keeps running. */
+  REIM_ERR_BUSY = 11,
+  /* v2: requested profile/capability (for example render_level != 0) is not
+   * supported by this build. */
+  REIM_ERR_CAPABILITY = 12,
+  /* v2: a frame exceeded REIM_MAX_FRAME_UPDATES/REMOVES/BYTES. Pending events
+   * are retained; reduce render distance and retry. */
+  REIM_ERR_LIMIT = 13
 } ReimResult;
+
+/* ReimRuntimeInfo.capabilities bits. */
+#define REIM_CAP_FRAME_BLOB 0x00000001u      /* v2 host-owned frame blob */
+#define REIM_CAP_INTERPOLATION 0x00000002u   /* prev_* + tick_alpha */
+#define REIM_CAP_ATLAS_ASSET 0x00000004u     /* get_asset atlas PNG/meta */
+#define REIM_CAP_R0 0x00000008u              /* render_level 0 supported */
 
 typedef enum ReimLogLevel {
   REIM_LOG_TRACE = 0,
@@ -149,6 +179,24 @@ typedef struct ReimInstanceConfig {
   float spawn_y;
   float spawn_z;
   uint32_t reserved[4];
+
+  /* ---- v2 additions ---------------------------------------------------- */
+
+  /* Host instance directory (contains instance.json and logs). Diagnostics
+   * only; the Runtime does not read Host configuration files. */
+  const wchar_t* instance_dir;
+  /* NativeVersion directory the Host loaded the DLL from. Diagnostics and log
+   * context; version validation of native_version.json/ue_adapter.json is a UE
+   * Host responsibility (M2-E6). Optional for Preview/headless. */
+  const wchar_t* native_version_path;
+  /* Requested render level. Only 0 (R0) is supported in M2; any other value
+   * makes create() fail with REIM_ERR_CAPABILITY. */
+  uint32_t render_level;
+  /* Optional spawn orientation for diagnostics/screenshots, in degrees using
+   * the Runtime convention. Applied only with REIM_CONFIG_FLAG_SPAWN_OVERRIDE. */
+  float spawn_yaw;
+  float spawn_pitch;
+  uint32_t reserved2[4];
 } ReimInstanceConfig;
 
 #define REIM_CONFIG_FLAG_SPAWN_OVERRIDE 0x00000001u
@@ -163,17 +211,48 @@ typedef struct ReimInputEvent {
   float    dy;     /* MOUSE_MOTION: vertical pixels since last event */
 } ReimInputEvent;
 
-#define REIM_INSTANCE_CONFIG_MIN_SIZE \
+/* v1 prefix size; kept so callers can sanity-check older layouts. */
+#define REIM_INSTANCE_CONFIG_V1_SIZE \
   ((uint32_t)(offsetof(ReimInstanceConfig, reserved) + sizeof(((ReimInstanceConfig*)0)->reserved)))
+/* v2 required size: every field through the last reserved slot must be known. */
+#define REIM_INSTANCE_CONFIG_MIN_SIZE \
+  ((uint32_t)(offsetof(ReimInstanceConfig, reserved2) + \
+              sizeof(((ReimInstanceConfig*)0)->reserved2)))
 #define REIM_INPUT_EVENT_MIN_SIZE \
   ((uint32_t)(offsetof(ReimInputEvent, dy) + sizeof(float)))
 
 typedef struct ReimInstance ReimInstance;
 
+/* v2 runtime identity/capabilities, validated by the UE Host before world
+ * creation (M2-B5/M2-E6). */
+typedef struct ReimRuntimeInfo {
+  uint32_t struct_size;
+  uint32_t abi_version;
+  char     profile[16];        /* "26.3" */
+  char     build_id[64];       /* Runtime build version string */
+  uint64_t manifest_hash;      /* stable hash of the accepted generated manifest */
+  uint32_t capabilities;       /* REIM_CAP_* bits */
+  uint32_t render_level;       /* 0 = R0 */
+  uint32_t dll_abi_version;    /* ABI of the loaded DLL image */
+  uint32_t reserved[7];
+} ReimRuntimeInfo;
+
+typedef enum ReimAssetKind {
+  REIM_ASSET_ATLAS_PNG = 1,   /* PNG bytes, as stored in generated/atlas.png */
+  REIM_ASSET_ATLAS_META = 2   /* UTF-8 JSON: width/height/tile/sampling/format/hash */
+} ReimAssetKind;
+
+#define REIM_RUNTIME_INFO_MIN_SIZE \
+  ((uint32_t)(offsetof(ReimRuntimeInfo, reserved) + \
+              sizeof(((ReimRuntimeInfo*)0)->reserved)))
+
 typedef struct ReimRuntimeApi {
   uint32_t struct_size;
   uint32_t abi_version;
 
+  /* create validates generated data (manifest/ABI/profile) and the config.
+   * render_level != 0 fails with REIM_ERR_CAPABILITY. host with null
+   * alloc/free fails with REIM_ERR_INVALID_ARGUMENT. */
   ReimInstance* (REIM_CALL* create)(const ReimInstanceConfig* config,
                                     const ReimHostApi* host,
                                     int32_t* out_error);
@@ -182,8 +261,10 @@ typedef struct ReimRuntimeApi {
   int32_t (REIM_CALL* start)(ReimInstance* instance);
   void    (REIM_CALL* stop)(ReimInstance* instance);
 
-  /* Fills out with the latest immutable snapshot. Returns REIM_OK or an error.
-   * A frame before initial load completes has ready == 0. */
+  /* Fills out with the latest snapshot copied into one host-owned blob.
+   * Returns REIM_OK, REIM_ERR_BUSY (too many unreleased frames),
+   * REIM_ERR_LIMIT (frame too large) or another error. A frame before initial
+   * load completes has ready == 0. */
   int32_t (REIM_CALL* fetch_frame)(ReimInstance* instance, ReimRenderFrame* out);
 
   /* Queued input, applied on the next simulation tick. */
@@ -196,6 +277,22 @@ typedef struct ReimRuntimeApi {
    * into the caller buffer. Returns bytes written or a negative error code. */
   int32_t (REIM_CALL* get_status_json)(ReimInstance* instance, char* buffer,
                                        uint32_t buffer_size);
+
+  /* ---- v2 additions ---------------------------------------------------- */
+
+  /* Returns the Host-owned blob of the matching fetch_frame to the Runtime.
+   * Any thread; unknown/duplicate ids are a logged no-op. */
+  void (REIM_CALL* release_frame)(ReimInstance* instance, uint64_t frame_id);
+
+  /* Fills the caller-provided ReimRuntimeInfo (struct_size checked). */
+  int32_t (REIM_CALL* get_runtime_info)(ReimInstance* instance,
+                                        ReimRuntimeInfo* out);
+
+  /* Returns read-only asset memory owned by the Runtime, valid until destroy.
+   * out_revision changes when the instance's asset content changes. */
+  int32_t (REIM_CALL* get_asset)(ReimInstance* instance, uint32_t kind,
+                                 const void** out_data, uint64_t* out_size,
+                                 uint64_t* out_revision);
 } ReimRuntimeApi;
 
 /* Returns nullptr when abi_version does not match REIM_ABI_VERSION.

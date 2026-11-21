@@ -30,6 +30,18 @@ std::string get_string(const Json& object, const char* name,
   return it->get<std::string>();
 }
 
+uint64_t get_u64(const Json& object, const char* name, uint64_t fallback = 0) {
+  if (!object.is_object()) return fallback;
+  const auto it = object.find(name);
+  if (it == object.end()) return fallback;
+  if (it->is_number_unsigned()) return it->get<uint64_t>();
+  if (it->is_number_integer()) {
+    const int64_t value = it->get<int64_t>();
+    return value < 0 ? fallback : static_cast<uint64_t>(value);
+  }
+  return fallback;
+}
+
 bool resolve_inputs(const std::filesystem::path& given, const std::string& version,
                     ResolvedInputs& out, std::string& error) {
   if (!file::is_directory(given)) {
@@ -139,6 +151,9 @@ bool load_input_manifest(const std::filesystem::path& profile_dir, InputManifest
   out.client_jar_sha256 = get_string(out.json, "client_jar_sha256");
   out.version_json_sha256 = get_string(out.json, "version_json_sha256");
   out.asset_index_sha256 = get_string(out.json, "asset_index_sha256");
+  out.client_jar_size = get_u64(out.json, "client_jar_size");
+  out.version_json_size = get_u64(out.json, "version_json_size");
+  out.asset_index_size = get_u64(out.json, "asset_index_size");
   if (out.profile.empty() || out.client_jar.empty()) {
     error = "input_manifest.json lacks profile/client_jar; run prepare first";
     return false;

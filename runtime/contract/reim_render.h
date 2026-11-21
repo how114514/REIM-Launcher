@@ -1,5 +1,5 @@
 /*
- * REIM Render Contract (M1).
+ * REIM Render Contract, version 2 (M2).
  *
  * The Runtime produces an immutable frame snapshot. The Host only uploads and
  * draws the supplied meshes; it never reconstructs world state or simulates
@@ -7,6 +7,31 @@
  * in a frame when it is loaded or remeshed, and in the remove list when it is
  * unloaded. Every mesh carries a monotonically increasing revision so a Host
  * can discard stale work.
+ *
+ * Frame ownership (v2, M2-D04)
+ *   fetch_frame allocates ONE host-owned blob through ReimHostApi::alloc and
+ *   copies every update/remove/vertex/index into it. The pointers inside
+ *   ReimRenderFrame point into that blob, and owned_block/owned_bytes identify
+ *   it. The Host must call release_frame(instance, frame_id) once it is done
+ *   consuming the snapshot (after GPU upload for asynchronous renderers).
+ *   The Runtime frees the blob through ReimHostApi::free inside release_frame.
+ *   At most REIM_MAX_PENDING_FRAMES blobs may be outstanding; fetch_frame
+ *   returns REIM_ERR_BUSY without mutating simulation state when the Host has
+ *   not released an earlier frame.
+ *
+ * Size limits (B8)
+ *   A frame may carry at most REIM_MAX_FRAME_UPDATES mesh updates, at most
+ *   REIM_MAX_FRAME_REMOVES removes and at most REIM_MAX_FRAME_BYTES bytes of
+ *   blob. Exceeding a limit returns REIM_ERR_LIMIT; the pending events are
+ *   retained so the Host can reduce render distance and retry. Sections are
+ *   never silently dropped.
+ *
+ * Interpolation (v2, M2-D05)
+ *   camera/player are the current tick state; prev_camera/prev_player the
+ *   previous published tick. tick_alpha is [0,1] between them. Positions
+ *   interpolate linearly; yaw/pitch take the shortest angular path. tick_alpha
+ *   is 0 while the simulation is paused or a tick has not advanced. Meshes are
+ *   not interpolated; they change on tick boundaries.
  *
  * Vertex layout is packed and stable:
  *   offset 0  float position[3]  (world space, blocks; section coords + 0..16)
@@ -111,6 +136,12 @@ typedef struct ReimSectionRemove {
   int32_t section_y;
 } ReimSectionRemove;
 
+/* Host-side hard limits enforced by fetch_frame (v2). */
+#define REIM_MAX_PENDING_FRAMES 4u
+#define REIM_MAX_FRAME_UPDATES 4096u
+#define REIM_MAX_FRAME_REMOVES 4096u
+#define REIM_MAX_FRAME_BYTES (64ull * 1024ull * 1024ull)
+
 typedef struct ReimRenderFrame {
   uint32_t struct_size;
   uint32_t abi_version;
@@ -147,14 +178,40 @@ typedef struct ReimRenderFrame {
    * computes this because only it can query world collision. A first-person
    * Host may ignore it. */
   float third_person_distance;
+
+  /* ---- v2 additions (M2-D04/M2-D05) ------------------------------------ */
+
+  /* Previous published tick, for Host-side interpolation. When the simulation
+   * is paused (or no tick has advanced since the last fetch) these equal the
+   * current snapshots and tick_alpha is 0. */
+  ReimCameraSnapshot prev_camera;
+  ReimPlayerSnapshot prev_player;
+  /* 0..1 between prev_* and the current snapshots. */
+  float tick_alpha;
+
+  /* Host-owned blob backing updates/removes/vertices/indices. Non-null for
+   * every successful fetch (an empty frame still owns a small blob), so the
+   * Host must call release_frame(instance, frame_id) for every returned frame
+   * and must never free owned_block itself. */
+  void* owned_block;
+  uint64_t owned_bytes;
+  uint32_t reserved[4];
 } ReimRenderFrame;
 
 #define REIM_RENDER_FRAME_MIN_SIZE \
-  ((uint32_t)(offsetof(ReimRenderFrame, third_person_distance) + sizeof(float)))
+  ((uint32_t)(offsetof(ReimRenderFrame, reserved) + \
+              sizeof(((ReimRenderFrame*)0)->reserved)))
 
 #ifdef __cplusplus
 static_assert(sizeof(ReimVertex) == REIM_VERTEX_STRIDE,
               "ReimVertex layout changed; update the ABI documentation");
+static_assert(offsetof(ReimRenderFrame, frame_id) == 8,
+              "ReimRenderFrame prefix changed");
+static_assert(offsetof(ReimRenderFrame, prev_camera) + sizeof(ReimCameraSnapshot) ==
+                  offsetof(ReimRenderFrame, prev_player),
+              "ReimRenderFrame interpolation layout changed");
+static_assert(offsetof(ReimRenderFrame, owned_block) < REIM_RENDER_FRAME_MIN_SIZE,
+              "ReimRenderFrame owned blob fields must precede reserved padding");
 #endif
 
 #ifdef __cplusplus

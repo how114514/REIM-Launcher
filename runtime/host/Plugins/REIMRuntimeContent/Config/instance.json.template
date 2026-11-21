@@ -1,0 +1,11 @@
+{
+  "world_path": "PUT_YOUR_26.3_SAVE_DIRECTORY_HERE",
+  "generated_path": "PUT_YOUR_GENERATED_26.3_DIRECTORY_HERE",
+  "native_version_path": "PUT_NATIVEVERSION_DIRECTORY_HERE",
+  "minecraft_dir": "",
+  "render_distance": 8,
+  "mouse_sensitivity": 0.15,
+  "invert_y": false,
+  "render_level": 0,
+  "auto_start": true
+}

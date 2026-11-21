@@ -3,11 +3,13 @@ add_executable(m1-tests
   test_s2.cpp
   test_s3.cpp
   test_s4.cpp
+  test_m2_b.cpp
   "${CMAKE_SOURCE_DIR}/runtime/preview/render_math.cpp"
 )
 target_include_directories(m1-tests PRIVATE
   "${CMAKE_SOURCE_DIR}/third_party/catch2"
   "${CMAKE_SOURCE_DIR}/runtime/preview"
+  "${CMAKE_SOURCE_DIR}/runtime/host/Source/REIMBridge/Public"
 )
 target_compile_definitions(m1-tests PRIVATE
   REIM_TEST_GENERATED_DIR="${CMAKE_SOURCE_DIR}/generated/26.3"

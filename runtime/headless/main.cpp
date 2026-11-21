@@ -132,6 +132,23 @@ void host_log(int32_t level, const char* category, const char* message) {
   std::fflush(stdout);
 }
 
+void* REIM_CALL host_alloc(size_t size, size_t align) {
+  if (align < alignof(std::max_align_t)) align = alignof(std::max_align_t);
+#if defined(_MSC_VER)
+  return _aligned_malloc(size, align);
+#else
+  return std::aligned_alloc(align, (size + align - 1) & ~(align - 1));
+#endif
+}
+
+void REIM_CALL host_free(void* ptr) {
+#if defined(_MSC_VER)
+  _aligned_free(ptr);
+#else
+  std::free(ptr);
+#endif
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -195,6 +212,8 @@ int main(int argc, char** argv) {
   ReimHostApi host{};
   host.struct_size = sizeof(host);
   host.abi_version = REIM_ABI_VERSION;
+  host.alloc = &host_alloc;
+  host.free = &host_free;
   host.log = &host_log;
 
   ReimInstanceConfig config{};
@@ -261,6 +280,10 @@ int main(int argc, char** argv) {
       vertices_seen += frame.updates[i].vertex_count;
       indices_seen += frame.updates[i].index_count;
     }
+    api->release_frame(instance, frame.frame_id);
+    last.updates = nullptr;
+    last.removes = nullptr;
+    last.owned_block = nullptr;
     if (frame.ready) ready = true;
 
     const double elapsed = std::chrono::duration<double>(

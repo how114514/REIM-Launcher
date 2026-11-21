@@ -36,6 +36,8 @@
 
 在用户自有 26.3 真实存档上，同一份 `mc_26.3.dll` 同时被 `REIMPreview.exe` 与 `REIMRuntime.exe` 驱动；UE Shipping 包在未安装 UE 的干净 Windows 机器上启动并显示真实区块；20 TPS 模拟与渲染 FPS 独立；**UE 运行的是 Converter 工具链产出的 NativeBuild/NativeVersion（含 UE Adapter 描述与校验），而不是手工拼装的 DLL/工程**；临时 Renderer 保留且不形成第二套游戏实现；G2 通过。
 
+> **S4 补充（2026-11-21）**：H6 首轮用户目视验收发现 UE 画面贴图颜色与原生 26.3 不符（草顶灰、云杉叶白、无烘焙光照）。图集确为用户 `client.jar` 的原生素材；根因在 UE 顶点色绑定与状态变体/非整方块覆盖，见 §15。S4（M2-I）只修视觉正确性，不改变 ABI。
+
 ---
 
 ## 1. 目标、边界与验收
@@ -402,6 +404,23 @@ M2 引入一个 Host 侧的 `instance.json`，避免 Shipping 依赖长命令行
 | H6 | G2 结论与用户可见验收 | 用户实际运行 UE 画面并确认；形成进入 M3 的依据 |
 
 **验收**：ROADMAP M2 七条全部满足，或未执行条目经用户显式豁免并记录，形成 G2 结论。
+
+### M2-I — 贴图/模型正确性（S4，H6 发现）
+
+> 触发：2026-11-21 H6 首轮用户目视验收发现 UE 画面贴图/颜色与原生 26.3 不符。图集本身来自用户 `client.jar`（`manifest.json` 记录 `client_jar_sha256`），不是素材缺失；问题在 UE 呈现层的顶点色绑定，以及 Converter/运行时对状态变体与非整方块未覆盖。证据与根因见 §15。
+
+| 编号 | 内容 | DoD |
+|---|---|---|
+| I1 | 修 UE 顶点色绑定：`McRenderState.cpp` 的 `InitComponentVF(..., true)` 在 UE 5.8 语义是 per-instance override 颜色，不是逐顶点色；确认 `M_McBlock` 为 `Atlas × VertexColor` 输出到 Emissive（Unlit） | 草顶恢复 tint 与烘焙明暗；云杉叶恢复深绿；不再灰草/白叶/平板光 |
+| I2 | 图集采样与色彩空间：clamp、单 mip、nearest、NeverStream；tint 的 sRGB/linear 与 Preview 统一 | 无跨 tile 渗色；同场景 Preview/UE 色差在阈值内 |
+| I3 | 状态变体端到端：世界 `properties` 参与视觉解析；至少 `grass_block[snowy=true]` → `grass_block_snow` | 雪地草方块侧面使用 `grass_block_snow` |
+| I4 | 多层/非整方块几何：多层 element、薄方块（`snow_height*`）、十字植物（`short_grass`/花/蕨）、双面 cutout | 出生点可见雪层与草；无洋红缺失块 |
+| I5 | biome tint：使用已解析的 biome palette，按位置给草/叶/水着色；Converter 产出群系颜色表 | 雪地群系颜色与原生一致；Preview/UE 同色 |
+| I6 | Alpha/cutout 与水面：树叶/植物 cutout；水 tint/alpha（动画纹理记为限制） | 树叶不是整块不透明；水色正确 |
+| I7 | 视觉回归工具：固定相机像素断言（草/叶/雪/水颜色阈值、无洋红块、Preview/UE 对照），接入一键验收 | 报告 JSON 含逐项 pass/fail 与截图 |
+| I8 | 重建与 H6 重跑：extract → CMake → UE Dev/Shipping → package/assemble → H6；更新验收记录 | 用户确认 H6；未确认不得写通过 |
+
+**验收**：H6 出生点同视角下草/叶/雪/水颜色正确且无缺失块；Preview/UE 差异可解释；ABI v2 不变；NativeBuild 仍由工具链产出并通过 hash 校验。
 
 ---
 
@@ -933,7 +952,7 @@ build\m2\native-build\26.3\REIMRuntime\REIMRuntime.exe ^
 
 ---
 
-## 14. 会话拆分与交接（建议 3 个会话）
+## 14. 会话拆分与交接（建议 4 个会话）
 
 > 目标：减少会话切换；每个会话覆盖一个完整技术闭环。合并后单会话更长，按工作包结束点自检并更新交接状态，避免上下文堆积。
 
@@ -942,14 +961,16 @@ build\m2\native-build\26.3\REIMRuntime\REIMRuntime.exe ^
 | **S1 基础 + R0 渲染** | M2-A + M2-B + M2-C | 22–38 小时 | UE 5.8.4、M1 构建可用 | UE 工程/ABI v2/Bridge；R0 真实地形/图集/光照/雾；Preview v2；R0 截图 |
 | **S2 Host + Converter UE 集成** | M2-D + M2-G1 + M2-E | 16–28 小时 | S1 | 第一人称输入/菜单/加载；`package`/`assemble`；NativeVersion/NativeBuild；双后端状态对照 |
 | **S3 Shipping + 回归 + 验收** | M2-F + M2-G（余项）+ M2-H | 12–22 小时 | S2；干净机可用 | NativeBuild Shipping；干净机记录；性能/JVM/错误路径报告；`M2_ACCEPTANCE.md`；G2 结论 |
+| **S4 贴图/模型正确性（新增）** | M2-I | 10–20 小时 | S3 完成；H6 首轮（2026-11-21）发现贴图颜色错误 | UE 顶点色/tint 修复；状态变体与雪层/植物；biome tint；视觉回归；H6 重跑证据 |
 
-**为什么是 3 个**
+**为什么是 4 个**
 
 - S1 把“UE 工程 → ABI/Bridge → R0 Renderer”放在同一会话，第一次把 Contract/帧块/渲染闭环，减少跨会话契约反复。
 - S2 把 Host 与 Converter UE 集成放在一起：输入/生命周期与 NativeBuild 启动/校验是同一个运行闭环；G1 双后端也在此完成。
 - S3 把 Shipping、回归和验收放在最后，避免验收发现问题再跨会话往返。
 - 合并后单会话更长：每个工作包（A/B/C 等）结束时都按 §14.2 留交接状态；上下文告急时在本会话内切分，不改变计划编号。
 - 若 S1 的 VF 集成严重阻塞，优先按 C3/§8.3 的降级方案继续，不新开会话重做。
+- S4 是 H6 首轮目视验收后新增的修复阶段：贴图颜色不正确，按门禁不能带病宣布 M2 完成；S4 只修视觉正确性，不扩功能、不改 ABI。
 
 ### 14.1 每个会话的开始提示
 
@@ -960,6 +981,7 @@ build\m2\native-build\26.3\REIMRuntime\REIMRuntime.exe ^
 合并会话较长：每完成一个工作包就更新 §14.3，不要攒到最后。
 未安装 UE 时停止 UE 工作并报告；不要用替代引擎或假截图。
 未实际运行的结果不要写成通过。
+S4 只允许修贴图/模型/颜色正确性：先保存 before 截图，不改 ABI 语义。
 ```
 
 ### 14.2 每个会话的结束条件
@@ -974,9 +996,10 @@ build\m2\native-build\26.3\REIMRuntime\REIMRuntime.exe ^
 
 | 会话 | 状态 | 已完成 | 已知问题 / 下一步 |
 |---|---|---|---|
-| S1 基础 + R0 渲染 | 未开始 | 环境已验证：UE 5.8.4、MSVC 14.44、NetFxSDK 4.8.1、DDC=`D:\UE-DDC` | 先冻结 ABI v2（帧块/插值/资产），再写 Renderer；C1–C3 先打通一个 section；干净机待确认 |
-| S2 Host + Converter UE 集成 | 未开始 | — | 依赖 S1；输入只走 ABI；先冻结 adapter/native_version schema，再 `package`/`assemble`；G1 用 NativeBuild |
-| S3 Shipping + 回归 + 验收 | 未开始 | — | 依赖 S2；干净机由用户提供；NativeBuild 不得手工拼装；按 ROADMAP M2 七条 + M2 执行补充 + G2 写实测 |
+| S1 基础 + R0 渲染 | 完成（S1 范围） | 实测记录见 `docs/M2_ACCEPTANCE.md`：A2 + A3–A7（Editor/Game/打包 Development、插件暂存、日志、`m2-build.ps1`/`m2-smoke.ps1`、gitignore/LFS）；B1–B8（ABI v2、host-owned 帧块/4 块背压、插值、get_asset、get_runtime_info、坐标/FOV 单测、rd8 限值）；C1–C8（单 SceneProxy、RT 上传、图集/烘焙光照/雾/天空、相机、第三人称代理、HUD/截图、固定曝光）。m1-tests 30 用例通过（最终 1017 断言）；UE NullRHI 1000 tick（TPS 19.98–20.01，无 BUSY/fatal）；真实 26.3 地形与 DX11 截图已保存 | 遗留且不阻塞 S2：F5 未经实测、加载页未截图；D3D12 本次为 SM5（需补 SM6 targeted format）；R0 使用计划允许的 `FLocalVertexFactory`+烘焙顶点色降级；UE 仍用开发期 `dll_path`，NativeVersion/Adapter 校验与 Shipping/干净机在 S2/S3 完成 |
+| S2 Host + Converter UE 集成 | 完成（S2 范围） | 实测记录见 `docs/M2_ACCEPTANCE.md` §8–§10：E1–E9（manifest/blocks/textures schema v2 且无绝对路径、adapter pin/`ue_adapter.json`、`package`/`assemble` 字节可复现、Bridge 校验 DLL/manifest/adapter hash 与 adapter pin、E9 5 用例）；D1–D6（输入仅经 ABI、20 次启停、菜单截图 `s2-menu.png`、settings 持久化、fatal exit 2、无音频依赖）；G1 静止与 auto-walk 两种对照均 match（同 tick 玩家/区块/section/方块样本一致） | 遗留且不阻塞 S3：鼠标轴与其余键位映射未自动化（W 键经 ABI 已实测）；D5 交互式对话框未在无人值守下验证（fatal 非零退出已测）；UE 可执行名仍为 `REIM.exe`，F2 的命名在 S3 决定；Shipping/干净机、性能/JVM/错误矩阵、G5 自动化在 S3 |
+| S3 Shipping + 回归 + 验收 | 完成（S3 范围）；**M2 阻塞：F5 干净机 + H6 用户确认** | 实测记录见 `docs/M2_ACCEPTANCE.md` §11–§16：F1/F2/F3（`REIMRuntime` 目标、Development+Shipping BuildCookRun、app-local VC++、无 PDB/generated、DX12 SM6、Host `REIM-host.log`）；F4/E9 Shipping 5 用例；F6 `dumpbin` 依赖审计；F8 Shipping NativeBuild；G2 60 秒（TPS 19.94–20.04、exit 0、无 fatal）；G3（GT p99 0.007 ms、busy 0、RT 稳态 0.0009 ms）；G4 无 JVM；G5 自动化 3 用例通过；G6 零命中；G7 固定相机两次差异 0/255；H2 错误矩阵 11/11（minimize 实测）；H3 `m2-acceptance.ps1` 11 pass/0 fail/1 not_run | F5 未运行：本会话无干净 Windows 机器/证据；H6 用户尚未实际查看并确认画面。两者按门禁不得写成通过；需用户提供干净机或显式豁免并记录，然后重跑 `tools\m2-acceptance.ps1` 并补 §15/§16。下一条命令见 §14 Shipping 运行 |
+| S4 贴图/模型正确性 | 完成（S4 范围）；**H6 用户暂时通过（2026-11-21，仍有待改进视觉问题）** | 实测记录见 `docs/M2_ACCEPTANCE.md` §17。S4-0 before/after 截图与像素样本（`build/m2/reports/s4/`）。S4-1/S4-2：`InitComponentVF(..., false)` + **修正材质 VertexColor 连接（RGB 输出为匿名输出，旧脚本 `"RGB"` 静默失败）** + UE 空间太阳方向 + sRGB→linear 顶点色 + 单 mip 图集（CreateTransient，nearest/clamp/NeverStream）。S4-3/4：Converter `variants`（`grass_block[snowy=true]`→`grass_block_snow`、雪层 layers）与 `geometry`（薄盒/十字/≤2 element 盒）；Runtime `find_state` 与显式 quad 发射。S4-5：`biome_tints.json`（client.jar 群系 + colormap），雪原草色 0x80B497 核对。S4-6：masked cutout + Preview discard；水用群系 water tint（抽查蓝色半透明）。S4-7：`tools/m2-visual.ps1` 接入 `m2-acceptance.ps1`，Preview/UE Dev/UE Shipping 均 pass。S4-8：extract→CMake→UE Dev/Shipping→package/assemble（字节可复现）→验收 12 pass/0 fail/1 not_run（F5） | H6 需用户重新目视确认（未确认前 M2 不得宣布完成）；F5 干净机仍阻塞。已知限制：UE 不透明 pass 双面（几何/整方块正面约定差异，R0 记录）、UE tonemap 较 Preview 约 13% 偏暗、biome 单色无插值、多 element/旋转模型仍 skip |
 
 **状态写法**：`未开始` → `进行中` → `完成`；若阻塞写 `阻塞：<原因>`。只更新本表，不在这里写长篇总结。
 
@@ -987,5 +1010,107 @@ build\m2\native-build\26.3\REIMRuntime\REIMRuntime.exe ^
 | S1 | M2-A/B/C：UE 工程、打包骨架、ABI v2、Bridge、R0 Renderer、Preview v2 | 输入/菜单、Converter UE 集成、Shipping 验收 |
 | S2 | M2-D/E/G1：输入/UI/生命周期、UE Adapter pin、`package`/`assemble`、双后端对照 | 新渲染功能、Shipping 打包/干净机、验收记录 |
 | S3 | M2-F/G余/H：Shipping、干净机、性能/错误路径、验收 | 新功能、Converter 范围扩张、重构 |
+| S4 | M2-I：UE 顶点色/图集色彩、状态变体、雪层/植物/多层模型、biome tint、alpha/cutout、视觉回归 | 新 ABI 语义、新玩法、实体/方块实体/粒子/动画纹理、M3 功能 |
 
 **交接原则**：ABI v2（`reim_abi.h`、`reim_render.h`）、坐标/单位、线程/所有权、manifest v2、`ue_adapter.json`/`native_version.json`/`native_build.json` schema 在 S1/S2 冻结（S1 冻结 Contract；S2 冻结 Adapter/NativeVersion）；后续会话只实现/修复，不重新设计。若必须改，先在本表记录原因，再同时改文档、头文件、Converter、Preview 与 UE。
+
+---
+
+## 15. S4 详细计划 — 贴图/模型正确性（H6 发现）
+
+### 15.1 触发与证据（2026-11-21）
+
+- 用户按 §14 的 Shipping 命令启动 `build\native-build\26.3\REIMRuntime\REIMRuntime.exe`，使用 `build\m2\acceptance\instance-g2.json` 进入出生点（XYZ 16/65/80，yaw 0，pitch 0），目视发现贴图/颜色不对。
+- 实际画面（`build\m2\reports\m2-shipping-g2.png`、`s3-shipping-r0.png` 与本轮新截图一致）：
+  - 草方块**顶面为灰色**、云杉树**叶为灰白**、整体几乎没有光照层次；
+  - 泥土、南瓜、石头、草方块**侧面**颜色与图集一致（这些不依赖 tint；草侧的绿色镶边已烘焙在 `grass_block_side` 贴图里）；但雪地群系应使用的 `grass_block_snow` 变体未生效，见根因 2/3。
+- 同一份 `mc_26.3.dll`（sha256 `4fb83550…`）与同一 `generated/26.3`，由 `REIMPreview.exe` 在同一位置渲染为**绿色草顶、深绿云杉叶**，说明数据链路与图集正确，差异在 UE 呈现层。
+- 素材：`generated/26.3/atlas.png` 为 2048×64，内容为 `client.jar` 原生贴图（`manifest.json` 记录 `client_jar_sha256`）。**结论：不是“没有用原生素材”，而是 UE 没有应用 tint/光照，且 Converter/运行时未覆盖的状态变体与非整方块没有渲染。**
+- 世界数据实测（解析 `dimensions/minecraft/overworld/region/r.0.0.mca`）：
+  - 出生点地面：`grass_block[snowy=true]`（y=64）+ `snow[layers=1]`（y=65）；
+  - 同区块：`short_grass`、`pumpkin`；附近 chunk(2,6) 有 `spruce_leaves`；
+  - 即原生画面应为：雪地草方块 + 薄雪层 + 草、云杉。
+
+### 15.2 根因
+
+1. **P0 — UE 顶点色（tint + 烘焙光照）未生效**
+   - `runtime/host/Source/REIMRenderer/Private/McRenderState.cpp` 在 `InitFromDynamicVertex` 之后再次调用
+     `InitComponentVF(Mesh->VertexFactory.Get(), 0, true, Data)`。
+   - UE 5.8 `Engine/Source/Runtime/Engine/Public/StaticMeshResources.h` 中 `bInOverrideColorVertexBuffer` 的语义是
+     “make a vertex factory ready for **per-instance colors**”；`true` 走的是 per-instance/override 颜色路径，不是绑定 `ColorVertexBuffer` 的逐顶点颜色。
+   - 结果：`VertexColor` 为白色 → 草顶（`block/grass_block_top` 是灰度贴图）变灰、云杉叶（灰度）变白、`BakeVertexColor` 的 tint 与方向光全部丢失。
+   - 还需确认 `M_McBlock` 材质图确实把 `TextureSample(Atlas) × VertexColor` 接到 Emissive（材质为 Unlit）；若未接，同时修材质资产。
+2. **P0 — 状态变体没有参与视觉解析**
+   - `runtime/mc-native/world/chunk.cpp` 已解析方块 `properties` 与 biome palette，但世界映射只按方块名（`BlockTable::find(name)`），属性被丢弃。
+   - `blocks.json` 每个方块只保留一个 `representative_variant`（`grass_block` 固定为 `snowy=false`），因此整个雪原都按普通草方块渲染。
+3. **P0/P1 — 非整方块与多层模型被跳过**
+   - `minecraft:snow`（`layers=1..7`，`thin_block`）、`short_grass`（`tinted_cross`）等 `full_block=false` → `render_class=skip`，完全不生成几何。
+   - `converter/orchestrator/model_resolver.cpp` 只取第一个“整方块” element；草方块模型的 `grass_block_side_overlay` 层、雪层厚度、十字植物都被忽略。
+4. **P1 — tint 为固定默认色，未使用 biome 数据**
+   - `converter/orchestrator/model_resolver.cpp` 的 `default_tint()` 硬编码原版默认草/叶色（注释写明 “Per-biome tint arrives with biome data”）。
+   - 运行时已解析 `biome_palette`/`biome_indices`，但无人消费；修好 P0-1 后，雪地群系会显示错误的绿色。
+5. **P1 — 图集采样与色彩空间**
+   - UE 侧 `ImportBufferAsTexture2D` 可能生成 mip/使用 wrap；需强制 `TA_Clamp`、单 mip、`TF_Nearest`、`NeverStream`，否则远处会跨 tile 渗色，与 Preview 不一致。
+   - tint 字节为 sRGB；UE `VertexColor` 按线性处理，直接相乘会偏亮/偏灰；需要统一（转换到线性或材质内处理），Preview/UE 使用同一套规则。
+6. **P1 — alpha/水面**
+   - 树叶当前 `render_class=opaque`；十字植物需要双面 cutout；水固定 alpha 0.72 且无 biome 水色/动画（动画纹理 M2 不承诺）。
+
+### 15.3 任务（S4-0 … S4-8）
+
+| 编号 | 内容 | 主要文件 | DoD |
+|---|---|---|---|
+| S4-0 | 复现与基线：保存 Preview/UE 同位置 before 截图；记录像素采样点（草顶、云杉叶、雪、泥土、南瓜） | `build/m2/acceptance/g2/`、`build/m2/reports/` | before 图与像素值入报告；后续修复有对照 |
+| S4-1 | 修 UE 顶点色绑定（如 `InitComponentVF(..., false, ...)`，或直接使用 `InitFromDynamicVertex` 的默认绑定）；确认材质 `Atlas × VertexColor` | `McRenderState.cpp`、`M_McBlock.uasset` | 草顶恢复绿色、云杉叶恢复深绿、面与面之间有烘焙明暗 |
+| S4-2 | 图集采样/色彩：clamp、单 mip、nearest、NeverStream；sRGB→linear 统一 | `McWorldRendererComponent.cpp`、材质、Preview 着色器 | 无跨 tile 渗色；同场景 Preview/UE 颜色差异在阈值内 |
+| S4-3 | 状态变体端到端：解析并传递 `properties`，至少 `grass_block[snowy=true]` → `grass_block_snow`；数据结构支持按状态取视觉 | `chunk.cpp`、`simulation.cpp`、`block_table.*`、`blocks.json` schema | 雪地草方块侧面为 `grass_block_snow`（带雪缘） |
+| S4-4 | 多层/非整方块几何：多层 element、薄方块（`snow_height*`）、十字植物（`short_grass`/花/蕨）；双面 cutout；剔除规则 | `model_resolver.cpp`、`extract.cpp`、`blocks.json`、`section_mesh.cpp` | 出生点可见雪层与草；无洋红缺失块 |
+| S4-5 | biome tint：按方块位置取 biome；Converter 产出草/叶/水颜色表；雪地群系使用对应色 | `chunk.cpp`、`simulation.cpp`、`model_resolver.cpp`、生成物 | 雪地草/叶颜色与原生一致；Preview/UE 同色 |
+| S4-6 | Alpha/水面：树叶/植物 cutout；水 tint/alpha | 材质、`section_mesh.cpp`、生成物 | 树叶不是整块不透明；水色正确（动画除外） |
+| S4-7 | 视觉回归工具：固定相机像素断言（草/叶/雪/水颜色阈值、无洋红块、可选 Preview/UE 对照），接入一键验收 | `tools/m2-visual.ps1`（新）、`tools/m2-acceptance.ps1`、报告 JSON | 报告含逐项 pass/fail 与截图；失败可定位 |
+| S4-8 | 重建与 H6 重跑：extract → CMake → UE Dev/Shipping → package/assemble → H6；更新 `M2_ACCEPTANCE.md` | 工具链与文档 | 用户确认 H6；未确认不得写通过 |
+
+### 15.4 实施顺序与命令
+
+1. S4-0（复现/before 截图）→ S4-1（顶点色）→ S4-2（采样/色彩）：先拿到肉眼可见的最大修复。
+2. S4-3 + S4-4（状态与几何）→ S4-5（biome tint）→ S4-6（alpha/水）。
+3. S4-7（回归脚本）→ 重建 → S4-8（H6）。
+
+```powershell
+# 数据（若 schema/变体/几何有变更）
+build\m2\bin\reim-convert.exe extract --profile 26.3 --out generated\26.3
+
+# C++ Runtime + Converter
+cmake --preset m2-release
+cmake --build --preset m2-release
+
+# UE（按需 Development/Shipping）
+powershell -ExecutionPolicy Bypass -File tools\m2-build.ps1 -Config Release
+powershell -ExecutionPolicy Bypass -File tools\m2-build.ps1 -Package -PackageConfig Shipping
+
+# NativeVersion/NativeBuild（工具链，不手工拷贝）
+powershell -ExecutionPolicy Bypass -File tools\m2-package.ps1 -Generated D:\EngineeringDocuments\REIM-Launcher\generated\26.3 -VerifyRepro
+
+# Preview before/after（同位置）
+build\m2\bin\REIMPreview.exe --world "D:\Minecraft\.minecraft\saves\REIM-M1-26.3" --generated "D:\EngineeringDocuments\REIM-Launcher\generated\26.3" --render-distance 6 --hidden --frames 150 --screenshot build\m2\reports\h6-preview.png
+
+# UE H6（PowerShell 用一行或反引号续行，不能使用 cmd 的 ^）
+.\build\native-build\26.3\REIMRuntime\REIMRuntime.exe "-reim-instance=D:\EngineeringDocuments\REIM-Launcher\build\m2\acceptance\instance-g2.json" -windowed -log -ResX=1280 -ResY=720
+```
+
+### 15.5 验收与证据
+
+- 目视：出生点同视角下，雪地草方块侧面带雪缘、雪层与草可见、云杉叶为深绿、画面有烘焙明暗层次；南瓜/泥土/石头保持正确。
+- 像素断言（建议阈值，脚本实现时可调）：
+  - 非雪地草顶绿色：`G > R + 15` 且 `G > B + 15`（出生点若全为雪，用 `--spawn` 或移动到附近非雪草方块取样）；
+  - 云杉叶：绿色且亮度低于草顶（tint 生效）；
+  - 雪（出生点地面）：RGB 均 > 180 且低饱和；
+  - 任意帧无洋红 checker（`R>200, G<40, B>200`）。
+- 回归：同一 H6 场景 Preview/UE 固定相机截图差异可解释；`m2-acceptance.ps1` 不含 not_run 的视觉项。
+- 记录：S4 完成证据写入 `docs/M2_ACCEPTANCE.md`（新增 S4 小节），H6 仍以用户确认为准；F5 干净机不受影响。
+- ABI v2 与坐标/单位契约不变；NativeVersion/NativeBuild 由工具链产出且 hash 校验通过。
+
+### 15.6 非目标（S4 不做）
+
+- 新 ABI 字段或语义；把游戏逻辑/世界解析搬进 UE。
+- 完整非整方块覆盖（楼梯/台阶/栅栏/门/墙/红石等全部朝向与连接）、方块实体、实体、粒子、天气、动画纹理、OIT、PBR/阴影/Lumen。
+- 生物群系混合、平滑光照（AO）、正式 UI/安装器等 M3 范围。

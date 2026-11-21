@@ -1,0 +1,30 @@
+{
+  "schema": "reim.ue_adapter_pin",
+  "format": 2,
+  "adapter_id": "reim-ue-adapter",
+  "adapter_version": "1.0.0-r0",
+  "ue_version": "5.8.4",
+  "ue_version_short": "5.8",
+  "abi_version": 2,
+  "render_level": 0,
+  "platform": "Win64",
+  "feature_flags": [
+    "r0",
+    "frame_blob",
+    "tick_interpolation",
+    "baked_vertex_light",
+    "local_vertex_factory",
+    "no_lumen",
+    "no_nanite",
+    "no_vsm"
+  ],
+  "asset_roots": [
+    "runtime/host/REIM.uproject",
+    "runtime/host/Config",
+    "runtime/host/Content",
+    "runtime/host/Shaders",
+    "runtime/host/Plugins/REIMRuntimeContent/Config",
+    "runtime/host/Plugins/REIMRuntimeContent/REIMRuntimeContent.uplugin"
+  ],
+  "bridge_pin_header": "runtime/host/Source/REIMBridge/Public/ReimAdapterPin.h"
+}
